@@ -216,8 +216,11 @@ export class Level {
   /**
    * Create a new level with default layers
    */
-  static createDefault(name: string = 'Untitled Level'): Level {
-    const level = new Level({ name });
+  static createDefault(
+    name: string = 'Untitled Level',
+    gridConfig: Partial<GridConfig> = {}
+  ): Level {
+    const level = new Level({ name }, gridConfig);
 
     // Add default layers
     for (const layerConfig of DEFAULT_LAYERS) {

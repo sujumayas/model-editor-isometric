@@ -2,7 +2,7 @@
  * Main editor controller
  */
 
-import { ToolType, GridCoord } from '../core/types';
+import { ToolType, GridCoord, GridConfig } from '../core/types';
 import { Level } from '../level/Level';
 import { Canvas } from '../engine/Canvas';
 import { Camera } from '../engine/Camera';
@@ -151,8 +151,8 @@ export class Editor {
   /**
    * Create a new level
    */
-  newLevel(name?: string): void {
-    this._level = Level.createDefault(name);
+  newLevel(name?: string, gridConfig: Partial<GridConfig> = {}): void {
+    this._level = Level.createDefault(name, gridConfig);
 
     // Reset history
     this.history.clear();
@@ -162,6 +162,9 @@ export class Editor {
     if (firstLayer) {
       this.state.setActiveLayer(firstLayer.config.id);
     }
+
+    // Reset camera position for a fresh view
+    this.camera.setPosition(0, 0);
 
     this.state.markClean();
   }

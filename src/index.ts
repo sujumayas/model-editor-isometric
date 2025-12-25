@@ -11,6 +11,8 @@ import { TilePalette } from './ui/TilePalette';
 import { LayerPanel } from './ui/LayerPanel';
 import { Toolbar } from './ui/Toolbar';
 import { StatusBar } from './ui/StatusBar';
+import { ViewControls } from './ui/ViewControls';
+import { MapControls } from './ui/MapControls';
 import { loadFromLocalStorage } from './level/LevelSerializer';
 
 // Global reference to editor for debugging
@@ -66,6 +68,8 @@ async function init(): Promise<void> {
 
     // Initialize UI components
     const toolbar = new Toolbar('toolbar', editor);
+    const viewControls = new ViewControls('view-controls', editor);
+    const mapControls = new MapControls('map-controls', editor);
     const layerPanel = new LayerPanel('layer-list', editor);
     const tilePalette = new TilePalette('tile-palette', editor, tileRegistry);
     const statusBar = new StatusBar(editor);

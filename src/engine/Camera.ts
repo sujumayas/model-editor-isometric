@@ -27,6 +27,7 @@ export class Camera {
   private minZoom: number;
   private maxZoom: number;
   private viewport: Viewport = { width: 0, height: 0 };
+  private zoomListeners = new Set<(zoom: number) => void>();
 
   constructor(options: CameraOptions = {}) {
     this.state = {
@@ -60,6 +61,20 @@ export class Camera {
   }
 
   /**
+   * Get the minimum zoom level
+   */
+  get minZoomLevel(): number {
+    return this.minZoom;
+  }
+
+  /**
+   * Get the maximum zoom level
+   */
+  get maxZoomLevel(): number {
+    return this.maxZoom;
+  }
+
+  /**
    * Set the viewport size (call when canvas resizes)
    */
   setViewport(viewport: Viewport): void {
@@ -87,6 +102,7 @@ export class Camera {
    */
   setZoom(zoom: number, centerX?: number, centerY?: number): void {
     const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+    const previousZoom = this.state.zoom;
 
     // If center point provided, adjust position to zoom toward that point
     if (centerX !== undefined && centerY !== undefined) {
@@ -96,6 +112,9 @@ export class Camera {
     }
 
     this.state.zoom = newZoom;
+    if (previousZoom !== newZoom) {
+      this.emitZoomChange();
+    }
   }
 
   /**
@@ -111,7 +130,7 @@ export class Camera {
   reset(): void {
     this.state.x = 0;
     this.state.y = 0;
-    this.state.zoom = 1;
+    this.setZoom(1);
   }
 
   /**
@@ -188,5 +207,23 @@ export class Camera {
    */
   setState(state: CameraState): void {
     this.state = { ...state };
+    this.emitZoomChange();
+  }
+
+  // =========================================================================
+  // Events
+  // =========================================================================
+
+  onZoomChange(handler: (zoom: number) => void): () => void {
+    this.zoomListeners.add(handler);
+    return () => {
+      this.zoomListeners.delete(handler);
+    };
+  }
+
+  private emitZoomChange(): void {
+    for (const handler of this.zoomListeners) {
+      handler(this.state.zoom);
+    }
   }
 }
