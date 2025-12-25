@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Isometric Level Editor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      overflow: hidden;
+    }
+
+    #app {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #sidebar {
+      width: 280px;
+      background: #16213e;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #0f3460;
+    }
+
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #editor-canvas {
+      display: block;
+      background: #0f0f23;
+    }
+
+    .panel {
+      padding: 12px;
+      border-bottom: 1px solid #0f3460;
+    }
+
+    .panel-header {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    #tile-palette {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    #tile-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+    }
+
+    .tile-item {
+      aspect-ratio: 1;
+      background: #1a1a2e;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tile-item:hover {
+      border-color: #4a9eff;
+    }
+
+    .tile-item.selected {
+      border-color: #4aff9e;
+    }
+
+    .tile-item img {
+      max-width: 100%;
+      max-height: 100%;
+      image-rendering: pixelated;
+    }
+
+    #layer-panel {
+      max-height: 200px;
+    }
+
+    .layer-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .layer-item:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .layer-item.active {
+      background: rgba(74, 158, 255, 0.2);
+    }
+
+    .layer-visibility {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .layer-name {
+      flex: 1;
+      font-size: 13px;
+    }
+
+    #toolbar {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .tool-btn {
+      padding: 8px 12px;
+      background: #1a1a2e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .tool-btn:hover {
+      background: #252547;
+    }
+
+    .tool-btn.active {
+      background: #4a9eff;
+      color: #fff;
+      border-color: #4a9eff;
+    }
+
+    #status-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 6px 12px;
+      background: rgba(22, 33, 62, 0.9);
+      font-size: 12px;
+      color: #888;
+      display: flex;
+      gap: 20px;
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-4U20fMe3.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <div class="panel" id="toolbar-panel">
+        <div class="panel-header">Tools</div>
+        <div id="toolbar"></div>
+      </div>
+      <div class="panel" id="layer-panel">
+        <div class="panel-header">Layers</div>
+        <div id="layer-list"></div>
+      </div>
+      <div class="panel" id="tile-palette">
+        <div class="panel-header">Tiles</div>
+        <div id="tile-grid"></div>
+      </div>
+    </div>
+    <div id="canvas-container">
+      <canvas id="editor-canvas"></canvas>
+      <div id="status-bar">
+        <span id="status-position">Position: --</span>
+        <span id="status-tile">Tile: --</span>
+        <span id="status-layer">Layer: --</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
