@@ -36,11 +36,39 @@
       flex: 1;
       position: relative;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
     }
 
-    #editor-canvas {
+    #canvas-top-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #canvas-stack {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      background: #0f0f23;
+    }
+
+    .canvas-layer {
+      position: absolute;
+      inset: 0;
       display: block;
       background: #0f0f23;
+      transition: opacity 0.2s ease;
+    }
+
+    .canvas-layer.inactive {
+      opacity: 0;
+      pointer-events: none;
     }
 
     .panel {
@@ -222,6 +250,33 @@
       display: flex;
       gap: 20px;
     }
+
+    #movement-controls .tool-btn.small {
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+
+    .kind-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #ccc;
+    }
+
+    .kind-indicator {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      flex-shrink: 0;
+    }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
   </style>
 </head>
 <body>
@@ -239,6 +294,10 @@
         <div class="panel-header">Map</div>
         <div id="map-controls"></div>
       </div>
+      <div class="panel" id="movement-panel">
+        <div class="panel-header">Movement Testing</div>
+        <div id="movement-controls"></div>
+      </div>
       <div class="panel" id="layer-panel">
         <div class="panel-header">Layers</div>
         <div id="layer-list"></div>
@@ -249,7 +308,16 @@
       </div>
     </div>
     <div id="canvas-container">
-      <canvas id="editor-canvas"></canvas>
+      <div id="canvas-top-bar">
+        <div class="button-group" id="canvas-mode-toggle">
+          <button class="tool-btn small active" data-canvas="editor">Editing</button>
+          <button class="tool-btn small" data-canvas="movement">Movement Testing</button>
+        </div>
+      </div>
+      <div id="canvas-stack">
+        <canvas id="editor-canvas" class="canvas-layer"></canvas>
+        <canvas id="movement-canvas" class="canvas-layer inactive"></canvas>
+      </div>
       <div id="status-bar">
         <span id="status-position">Position: --</span>
         <span id="status-tile">Tile: --</span>

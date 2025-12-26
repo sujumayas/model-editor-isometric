@@ -14,6 +14,8 @@ import { StatusBar } from './ui/StatusBar';
 import { ViewControls } from './ui/ViewControls';
 import { MapControls } from './ui/MapControls';
 import { loadFromLocalStorage } from './level/LevelSerializer';
+import { MovementTester } from './movement/MovementTester';
+import { MovementControls } from './ui/MovementControls';
 
 // Global reference to editor for debugging
 declare global {
@@ -53,7 +55,7 @@ async function init(): Promise<void> {
     const editor = new Editor(
       {
         canvas: '#editor-canvas',
-        container: '#canvas-container',
+        container: '#canvas-stack',
       },
       tileRegistry
     );
@@ -73,12 +75,23 @@ async function init(): Promise<void> {
     const layerPanel = new LayerPanel('layer-list', editor);
     const tilePalette = new TilePalette('tile-palette', editor, tileRegistry);
     const statusBar = new StatusBar(editor);
+    const movementTester = new MovementTester(
+      {
+        canvas: '#movement-canvas',
+        container: '#canvas-stack',
+        tileRegistry,
+      }
+    );
+    const movementControls = new MovementControls('movement-controls', movementTester, editor);
 
     // Select first tile by default
     tilePalette.selectTile(0);
 
     // Start render loop
     editor.start();
+    movementTester.start();
+
+    setupCanvasToggle();
 
     // Expose editor globally for debugging
     window.editor = editor;
@@ -100,6 +113,33 @@ async function init(): Promise<void> {
     loadingEl.textContent = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
     loadingEl.style.color = '#ff4a4a';
   }
+}
+
+function setupCanvasToggle(): void {
+  const toggle = document.getElementById('canvas-mode-toggle');
+  const editorCanvas = document.getElementById('editor-canvas');
+  const movementCanvas = document.getElementById('movement-canvas');
+
+  if (!toggle || !editorCanvas || !movementCanvas) return;
+
+  toggle.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const btn = target.closest('button[data-canvas]') as HTMLButtonElement | null;
+    if (!btn) return;
+
+    const mode = btn.dataset.canvas;
+    if (mode === 'editor') {
+      editorCanvas.classList.remove('inactive');
+      movementCanvas.classList.add('inactive');
+    } else if (mode === 'movement') {
+      movementCanvas.classList.remove('inactive');
+      editorCanvas.classList.add('inactive');
+    }
+
+    toggle.querySelectorAll('button[data-canvas]').forEach((button) => {
+      button.classList.toggle('active', (button as HTMLButtonElement).dataset.canvas === mode);
+    });
+  });
 }
 
 // Start the application when DOM is ready
