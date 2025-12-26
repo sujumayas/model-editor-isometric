@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">Isometric level editor preview illustration</title>
+  <desc id="desc">Dark blue gradient background with a subtle isometric grid diamond in the center.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#181d35" />
+      <stop offset="100%" stop-color="#0a0c20" />
+    </linearGradient>
+    <linearGradient id="grid" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2f3e74" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#3a4a82" stop-opacity="0.7" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1400" height="900" fill="url(#bg)" />
+
+  <g transform="translate(700 450) scale(1)">
+    <g stroke="url(#grid)" stroke-width="1.5" fill="none" stroke-linecap="round">
+      <!-- draw diamond grid -->
+      <g id="grid-lines">
+        <g>
+          <!-- lines with positive slope -->
+          <!-- From top-left to bottom-right -->
+          <!-- 30 lines spaced 32px apart to form a grid -->
+          <g id="diag-pos">
+            <path d="M -640 -160 L 0 480" />
+            <path d="M -608 -192 L 32 448" />
+            <path d="M -576 -224 L 64 416" />
+            <path d="M -544 -256 L 96 384" />
+            <path d="M -512 -288 L 128 352" />
+            <path d="M -480 -320 L 160 320" />
+            <path d="M -448 -352 L 192 288" />
+            <path d="M -416 -384 L 224 256" />
+            <path d="M -384 -416 L 256 224" />
+            <path d="M -352 -448 L 288 192" />
+            <path d="M -320 -480 L 320 160" />
+            <path d="M -288 -512 L 352 128" />
+            <path d="M -256 -544 L 384 96" />
+            <path d="M -224 -576 L 416 64" />
+            <path d="M -192 -608 L 448 32" />
+            <path d="M -160 -640 L 480 0" />
+            <path d="M -128 -672 L 512 -32" />
+            <path d="M -96 -704 L 544 -64" />
+            <path d="M -64 -736 L 576 -96" />
+            <path d="M -32 -768 L 608 -128" />
+            <path d="M 0 -800 L 640 -160" />
+            <path d="M 32 -832 L 672 -192" />
+            <path d="M 64 -864 L 704 -224" />
+            <path d="M 96 -896 L 736 -256" />
+            <path d="M 128 -928 L 768 -288" />
+            <path d="M 160 -960 L 800 -320" />
+            <path d="M 192 -992 L 832 -352" />
+            <path d="M 224 -1024 L 864 -384" />
+            <path d="M 256 -1056 L 896 -416" />
+            <path d="M 288 -1088 L 928 -448" />
+          </g>
+          <!-- lines with negative slope -->
+          <g id="diag-neg">
+            <path d="M -640 -448 L 128 320" />
+            <path d="M -608 -480 L 160 288" />
+            <path d="M -576 -512 L 192 256" />
+            <path d="M -544 -544 L 224 224" />
+            <path d="M -512 -576 L 256 192" />
+            <path d="M -480 -608 L 288 160" />
+            <path d="M -448 -640 L 320 128" />
+            <path d="M -416 -672 L 352 96" />
+            <path d="M -384 -704 L 384 64" />
+            <path d="M -352 -736 L 416 32" />
+            <path d="M -320 -768 L 448 0" />
+            <path d="M -288 -800 L 480 -32" />
+            <path d="M -256 -832 L 512 -64" />
+            <path d="M -224 -864 L 544 -96" />
+            <path d="M -192 -896 L 576 -128" />
+            <path d="M -160 -928 L 608 -160" />
+            <path d="M -128 -960 L 640 -192" />
+            <path d="M -96 -992 L 672 -224" />
+            <path d="M -64 -1024 L 704 -256" />
+            <path d="M -32 -1056 L 736 -288" />
+            <path d="M 0 -1088 L 768 -320" />
+            <path d="M 32 -1120 L 800 -352" />
+            <path d="M 64 -1152 L 832 -384" />
+            <path d="M 96 -1184 L 864 -416" />
+            <path d="M 128 -1216 L 896 -448" />
+            <path d="M 160 -1248 L 928 -480" />
+            <path d="M 192 -1280 L 960 -512" />
+            <path d="M 224 -1312 L 992 -544" />
+            <path d="M 256 -1344 L 1024 -576" />
+            <path d="M 288 -1376 L 1056 -608" />
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <!-- center diamond highlight -->
+    <polygon points="0,-220 220,0 0,220 -220,0" fill="#1b264d" opacity="0.85" />
+    <polygon points="0,-180 180,0 0,180 -180,0" fill="#23335f" opacity="0.9" />
+    <polygon points="0,-140 140,0 0,140 -140,0" fill="#2c3e72" opacity="0.95" />
+    <polygon points="0,-100 100,0 0,100 -100,0" fill="#3b5ca1" opacity="0.9" />
+    <polygon points="0,-70 70,0 0,70 -70,0" fill="#4a9eff" opacity="0.9" />
+  </g>
+</svg>
