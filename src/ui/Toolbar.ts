@@ -24,6 +24,7 @@ export class Toolbar {
   private container: HTMLElement;
   private editor: Editor;
   private buttonElements = new Map<ToolType, HTMLElement>();
+  private fileInput: HTMLInputElement;
 
   constructor(containerId: string, editor: Editor) {
     const container = document.getElementById(containerId);
@@ -33,8 +34,10 @@ export class Toolbar {
 
     this.container = container;
     this.editor = editor;
+    this.fileInput = this.createFileInput();
 
     this.render();
+    this.container.appendChild(this.fileInput);
     this.setupEventListeners();
   }
 
@@ -58,6 +61,10 @@ export class Toolbar {
     // Add action buttons
     this.addActionButton('💾', 'Save (Ctrl+S)', () => {
       this.editor.saveToStorage();
+    });
+
+    this.addActionButton('📂', 'Import JSON', () => {
+      this.fileInput.click();
     });
 
     this.addActionButton('⬇️', 'Download JSON', () => {
@@ -102,6 +109,18 @@ export class Toolbar {
   }
 
   /**
+   * Create a hidden file input for JSON import
+   */
+  private createFileInput(): HTMLInputElement {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.style.display = 'none';
+    input.addEventListener('change', this.handleFileInputChange);
+    return input;
+  }
+
+  /**
    * Setup event listeners
    */
   private setupEventListeners(): void {
@@ -120,6 +139,24 @@ export class Toolbar {
       this.updateActiveButton();
     });
   }
+
+  /**
+   * Handle file input changes for importing JSON
+   */
+  private handleFileInputChange = async (): Promise<void> => {
+    const file = this.fileInput.files?.[0];
+    if (!file) return;
+
+    try {
+      await this.editor.loadLevelFromFile(file);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      window.alert(`Failed to import level: ${message}`);
+    } finally {
+      // Reset the input so the same file can be selected again
+      this.fileInput.value = '';
+    }
+  };
 
   /**
    * Update active button state

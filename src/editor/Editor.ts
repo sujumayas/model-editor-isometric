@@ -19,6 +19,7 @@ import {
   downloadLevel,
   saveToLocalStorage,
   loadFromLocalStorage,
+  loadLevelFromFile as importLevelFromFile,
 } from '../level/LevelSerializer';
 
 export interface EditorOptions {
@@ -152,30 +153,34 @@ export class Editor {
    * Create a new level
    */
   newLevel(name?: string, gridConfig: Partial<GridConfig> = {}): void {
-    this._level = Level.createDefault(name, gridConfig);
-
-    // Reset history
-    this.history.clear();
-
-    // Set active layer
-    const firstLayer = this._level.getLayers()[0];
-    if (firstLayer) {
-      this.state.setActiveLayer(firstLayer.config.id);
-    }
+    const level = Level.createDefault(name, gridConfig);
+    this.setLevel(level);
 
     // Reset camera position for a fresh view
     this.camera.setPosition(0, 0);
-
-    this.state.markClean();
   }
 
   /**
    * Load a level from JSON string
    */
   loadLevel(json: string): void {
-    this._level = deserializeLevel(json);
+    const level = deserializeLevel(json);
+    this.setLevel(level);
+  }
 
-    // Reset history
+  /**
+   * Load a level from a file input
+   */
+  async loadLevelFromFile(file: File): Promise<void> {
+    const level = await importLevelFromFile(file);
+    this.setLevel(level);
+  }
+
+  /**
+   * Replace the current level and reset editor state
+   */
+  private setLevel(level: Level): void {
+    this._level = level;
     this.history.clear();
 
     // Set active layer
@@ -184,6 +189,7 @@ export class Editor {
       this.state.setActiveLayer(firstLayer.config.id);
     }
 
+    this.state.notifyLevelLoaded(level.toData());
     this.state.markClean();
   }
 
@@ -222,15 +228,7 @@ export class Editor {
     const level = loadFromLocalStorage();
     if (!level) return false;
 
-    this._level = level;
-    this.history.clear();
-
-    const firstLayer = this._level.getLayers()[0];
-    if (firstLayer) {
-      this.state.setActiveLayer(firstLayer.config.id);
-    }
-
-    this.state.markClean();
+    this.setLevel(level);
     return true;
   }
 
