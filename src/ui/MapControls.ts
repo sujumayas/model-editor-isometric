@@ -90,6 +90,10 @@ export class MapControls {
     this.clearButton.addEventListener('click', () => {
       this.clearAllTiles();
     });
+
+    this.editor.state.on('level:loaded', () => {
+      this.updateSizeDisplay();
+    });
   }
 
   /**

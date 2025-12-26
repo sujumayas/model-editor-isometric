@@ -105,6 +105,10 @@ export class LayerPanel {
     this.editor.history.on('change', () => {
       this.updateTileCounts();
     });
+
+    this.editor.state.on('level:loaded', () => {
+      this.render();
+    });
   }
 
   /**

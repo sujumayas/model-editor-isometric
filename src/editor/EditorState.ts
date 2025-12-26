@@ -2,14 +2,15 @@
  * Editor state management
  */
 
-import { GridCoord, TileId, ToolType, EditorStateData } from '../core/types';
+import { GridCoord, TileId, ToolType, EditorStateData, LevelData } from '../core/types';
 
 export type EditorEventType =
   | 'tool:changed'
   | 'layer:changed'
   | 'tile:selected'
   | 'hover:changed'
-  | 'dirty:changed';
+  | 'dirty:changed'
+  | 'level:loaded';
 
 export type EditorEventHandler = (data: unknown) => void;
 
@@ -127,6 +128,10 @@ export class EditorState {
 
   private emit(event: EditorEventType, data: unknown): void {
     this.listeners.get(event)?.forEach((handler) => handler(data));
+  }
+
+  notifyLevelLoaded(level: LevelData): void {
+    this.emit('level:loaded', { level });
   }
 
   // =========================================================================
