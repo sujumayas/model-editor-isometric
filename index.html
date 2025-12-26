@@ -22,14 +22,49 @@
       display: flex;
       width: 100vw;
       height: 100vh;
+      gap: 10px;
+      padding: 10px;
     }
 
     #sidebar {
-      width: 280px;
+      width: 340px;
+      min-width: 320px;
       background: #16213e;
       display: flex;
       flex-direction: column;
       border-right: 1px solid #0f3460;
+      padding: 12px 10px;
+      gap: 10px;
+      overflow-y: auto;
+    }
+
+    #sidebar-header {
+      position: sticky;
+      top: 0;
+      background: #16213e;
+      z-index: 2;
+      padding-bottom: 4px;
+    }
+
+    #sidebar-tabs {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    #sidebar-tabs .tool-btn.small {
+      flex: 1;
+      justify-content: center;
+    }
+
+    .sidebar-pane {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sidebar-pane.active {
+      display: flex;
     }
 
     #canvas-container {
@@ -40,6 +75,9 @@
       flex-direction: column;
       gap: 8px;
       padding: 8px;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      background: rgba(15, 15, 35, 0.4);
     }
 
     #canvas-top-bar {
@@ -73,7 +111,9 @@
 
     .panel {
       padding: 12px;
-      border-bottom: 1px solid #0f3460;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      background: rgba(15, 15, 35, 0.6);
     }
 
     .panel-header {
@@ -124,6 +164,7 @@
     .button-group {
       display: flex;
       gap: 6px;
+      flex-wrap: wrap;
     }
 
     .size-btn {
@@ -134,6 +175,7 @@
     #tile-palette {
       flex: 1;
       overflow-y: auto;
+      min-height: 0;
     }
 
     #tile-grid {
@@ -282,29 +324,40 @@
 <body>
   <div id="app">
     <div id="sidebar">
-      <div class="panel" id="toolbar-panel">
-        <div class="panel-header">Tools</div>
-        <div id="toolbar"></div>
+      <div id="sidebar-header">
+        <div class="panel-header">Workspace</div>
+        <div class="button-group" id="sidebar-tabs">
+          <button class="tool-btn small active" data-pane="editor-pane">Map Editor</button>
+          <button class="tool-btn small" data-pane="movement-pane">Movement Tester</button>
+        </div>
       </div>
-      <div class="panel" id="view-panel">
-        <div class="panel-header">View</div>
-        <div id="view-controls"></div>
+      <div class="sidebar-pane active" id="editor-pane">
+        <div class="panel" id="toolbar-panel">
+          <div class="panel-header">Tools</div>
+          <div id="toolbar"></div>
+        </div>
+        <div class="panel" id="view-panel">
+          <div class="panel-header">View</div>
+          <div id="view-controls"></div>
+        </div>
+        <div class="panel" id="map-panel">
+          <div class="panel-header">Map</div>
+          <div id="map-controls"></div>
+        </div>
+        <div class="panel" id="layer-panel">
+          <div class="panel-header">Layers</div>
+          <div id="layer-list"></div>
+        </div>
+        <div class="panel" id="tile-palette">
+          <div class="panel-header">Tiles</div>
+          <div id="tile-grid"></div>
+        </div>
       </div>
-      <div class="panel" id="map-panel">
-        <div class="panel-header">Map</div>
-        <div id="map-controls"></div>
-      </div>
-      <div class="panel" id="movement-panel">
-        <div class="panel-header">Movement Testing</div>
-        <div id="movement-controls"></div>
-      </div>
-      <div class="panel" id="layer-panel">
-        <div class="panel-header">Layers</div>
-        <div id="layer-list"></div>
-      </div>
-      <div class="panel" id="tile-palette">
-        <div class="panel-header">Tiles</div>
-        <div id="tile-grid"></div>
+      <div class="sidebar-pane" id="movement-pane">
+        <div class="panel" id="movement-panel">
+          <div class="panel-header">Movement Testing</div>
+          <div id="movement-controls"></div>
+        </div>
       </div>
     </div>
     <div id="canvas-container">
