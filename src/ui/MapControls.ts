@@ -5,7 +5,7 @@
 import { Editor } from '../editor/Editor';
 import { BatchTileCommand, ClearLayerCommand } from '../editor/history/Command';
 
-const MAP_SIZES = [32, 64, 128];
+const MAP_SIZES = [8, 16, 32, 64, 128];
 
 export class MapControls {
   private container: HTMLElement;
