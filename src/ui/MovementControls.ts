@@ -2,16 +2,21 @@
  * UI for the movement testing view.
  */
 
-import { MovementTester, TileKind, ClickMode } from '../movement/MovementTester';
+import { MovementTester, TileKind, ClickMode, SimulationSpeed } from '../movement/MovementTester';
 import { Editor } from '../editor/Editor';
 import { CardinalDirection, GridCoord, TileBehavior } from '../core/types';
-import { TEST_SCENARIOS } from '../movement/testMaps';
+import { PHASE_TWO_SCENARIOS, TEST_SCENARIOS, TestScenario } from '../movement/testMaps';
 
 interface PlayerUIState {
   hp: number;
   maxHp: number;
   alive: boolean;
   reachedExit: boolean;
+  state: string;
+  paused: boolean;
+  speed: number;
+  nextStep: GridCoord | null;
+  pathHasHazard: boolean;
   stepMode: boolean;
   destination: GridCoord | null;
   spawn: GridCoord | null;
@@ -30,11 +35,15 @@ export class MovementControls {
   private kindLabel: HTMLElement;
   private pathLabel: HTMLElement;
   private hpLabel: HTMLElement;
+  private stateLabel: HTMLElement;
+  private nextMoveLabel: HTMLElement;
   private stepLabel: HTMLElement;
   private statusLabel: HTMLElement;
   private stepToggleBtn: HTMLButtonElement;
   private advanceBtn: HTMLButtonElement;
   private resetBtn: HTMLButtonElement;
+  private playPauseBtn: HTMLButtonElement;
+  private speedButtons = new Map<SimulationSpeed, HTMLButtonElement>();
 
   private directionSelect: HTMLSelectElement;
   private doorIdInput: HTMLInputElement;
@@ -71,9 +80,12 @@ export class MovementControls {
     this.kindLabel = document.createElement('div');
     this.pathLabel = document.createElement('div');
     this.hpLabel = document.createElement('div');
+    this.stateLabel = document.createElement('div');
+    this.nextMoveLabel = document.createElement('div');
     this.stepLabel = document.createElement('div');
     this.statusLabel = document.createElement('div');
 
+    this.playPauseBtn = document.createElement('button');
     this.stepToggleBtn = document.createElement('button');
     this.advanceBtn = document.createElement('button');
     this.resetBtn = document.createElement('button');
@@ -92,7 +104,8 @@ export class MovementControls {
     this.container.appendChild(this.fileInput);
 
     this.container.appendChild(this.renderLoadSection());
-    this.container.appendChild(this.renderScenarioSection());
+    this.container.appendChild(this.renderScenarioSection('Phase 1 Test Maps', TEST_SCENARIOS));
+    this.container.appendChild(this.renderScenarioSection('Phase 2 Test Maps', PHASE_TWO_SCENARIOS));
     this.container.appendChild(this.renderMovementSection());
     this.container.appendChild(this.renderModeSection());
     this.container.appendChild(this.renderKindSection());
@@ -129,18 +142,18 @@ export class MovementControls {
     return group;
   }
 
-  private renderScenarioSection(): HTMLElement {
+  private renderScenarioSection(title: string, scenarios: TestScenario[]): HTMLElement {
     const group = document.createElement('div');
     group.className = 'control-group';
 
     const label = document.createElement('div');
     label.className = 'control-label';
-    label.textContent = 'Phase 1 Test Maps';
+    label.textContent = title;
 
     const buttons = document.createElement('div');
     buttons.className = 'button-group';
 
-    TEST_SCENARIOS.forEach((scenario) => {
+    scenarios.forEach((scenario) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'tool-btn small';
@@ -167,6 +180,24 @@ export class MovementControls {
     label.className = 'control-label';
     label.textContent = 'Simulation';
 
+    const playControls = document.createElement('div');
+    playControls.className = 'button-group';
+
+    this.playPauseBtn.type = 'button';
+    this.playPauseBtn.className = 'tool-btn small';
+    this.playPauseBtn.textContent = 'Play';
+    this.playPauseBtn.addEventListener('click', () => {
+      const paused = this.playerState?.paused ?? true;
+      this.tester.setPaused(!paused);
+    });
+
+    const speedControls = document.createElement('div');
+    speedControls.className = 'button-group';
+
+    this.addSpeedButton(speedControls, 1);
+    this.addSpeedButton(speedControls, 2);
+    this.addSpeedButton(speedControls, 4);
+
     const buttons = document.createElement('div');
     buttons.className = 'button-group';
 
@@ -189,13 +220,29 @@ export class MovementControls {
     this.resetBtn.textContent = 'Reset to Spawn';
     this.resetBtn.addEventListener('click', () => this.tester.resetPlayer());
 
+    playControls.appendChild(this.playPauseBtn);
     buttons.appendChild(this.stepToggleBtn);
     buttons.appendChild(this.advanceBtn);
     buttons.appendChild(this.resetBtn);
 
     group.appendChild(label);
+    group.appendChild(playControls);
+    group.appendChild(speedControls);
     group.appendChild(buttons);
     return group;
+  }
+
+  private addSpeedButton(container: HTMLElement, speed: SimulationSpeed): void {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tool-btn small';
+    btn.textContent = `${speed}x`;
+    btn.addEventListener('click', () => {
+      this.tester.setSpeed(speed);
+      this.updateSpeedButtons(speed);
+    });
+    this.speedButtons.set(speed, btn);
+    container.appendChild(btn);
   }
 
   private renderModeSection(): HTMLElement {
@@ -412,6 +459,8 @@ export class MovementControls {
     this.kindLabel.className = 'control-meta';
     this.pathLabel.className = 'control-meta';
     this.hpLabel.className = 'control-meta';
+    this.stateLabel.className = 'control-meta';
+    this.nextMoveLabel.className = 'control-meta';
     this.stepLabel.className = 'control-meta';
     this.statusLabel.className = 'control-meta';
 
@@ -420,6 +469,8 @@ export class MovementControls {
     group.appendChild(this.kindLabel);
     group.appendChild(this.pathLabel);
     group.appendChild(this.hpLabel);
+    group.appendChild(this.stateLabel);
+    group.appendChild(this.nextMoveLabel);
     group.appendChild(this.stepLabel);
     group.appendChild(this.statusLabel);
 
@@ -430,6 +481,11 @@ export class MovementControls {
       maxHp: 3,
       alive: true,
       reachedExit: false,
+      state: 'normal',
+      paused: true,
+      speed: 1,
+      nextStep: null,
+      pathHasHazard: false,
       stepMode: false,
       destination: null,
       spawn: null,
@@ -474,12 +530,16 @@ export class MovementControls {
       this.playerState = state;
       this.updatePlayerStatus(state);
       this.updateStepToggle(state.stepMode);
+      this.updatePlayPause(state.paused);
+      this.updateSpeedButtons(state.speed);
       this.refreshButtonStates();
     });
 
     // Initialize UI state
     this.updateModeButtons('move');
     this.updateKindButtons('floor');
+    this.updatePlayPause(true);
+    this.updateSpeedButtons(1);
     this.refreshButtonStates();
   }
 
@@ -509,8 +569,9 @@ export class MovementControls {
   }
 
   private updatePathStatus(hasPath: boolean, path: GridCoord[]): void {
+    const hazardNote = this.playerState?.pathHasHazard ? ' (hazard ahead)' : '';
     if (hasPath && path.length > 1) {
-      this.pathLabel.textContent = `Path: ${path.length - 1} steps`;
+      this.pathLabel.textContent = `Path: ${path.length - 1} steps${hazardNote}`;
     } else {
       this.pathLabel.textContent = 'Path: none';
     }
@@ -522,18 +583,35 @@ export class MovementControls {
     const spawnText = state.spawn ? `Spawn: ${state.spawn.x}, ${state.spawn.y}` : 'Spawn: --';
     const destText = state.destination ? `Destination: ${state.destination.x}, ${state.destination.y}` : 'Destination: --';
     this.stepLabel.textContent = `${spawnText} • ${destText}`;
+    const next = state.nextStep ? `${state.nextStep.x}, ${state.nextStep.y}` : '--';
+    this.stateLabel.textContent = `State: ${state.state}`;
+    this.nextMoveLabel.textContent = `Next Move: ${next}`;
     if (!state.alive) {
       this.statusLabel.textContent = 'Status: Down (reset to respawn)';
     } else if (state.reachedExit) {
       this.statusLabel.textContent = 'Status: Exit reached';
     } else {
-      this.statusLabel.textContent = state.stepMode ? 'Status: Step-by-step' : 'Status: Auto movement';
+      const modeText = state.stepMode ? 'Step-by-step' : 'Auto movement';
+      this.statusLabel.textContent = state.paused ? 'Status: Paused' : `Status: ${modeText}`;
     }
   }
 
   private updateStepToggle(stepMode: boolean): void {
     this.stepToggleBtn.textContent = stepMode ? 'Step-by-step: On' : 'Step-by-step: Off';
     this.stepToggleBtn.classList.toggle('active', stepMode);
+  }
+
+  private updatePlayPause(paused: boolean): void {
+    this.playPauseBtn.textContent = paused ? 'Play' : 'Pause';
+    this.playPauseBtn.classList.toggle('active', !paused);
+  }
+
+  private updateSpeedButtons(active: SimulationSpeed): void {
+    this.speedButtons.forEach((btn, speed) => {
+      const isActive = speed === active;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
+    });
   }
 
   private syncProperties(behavior: TileBehavior): void {
@@ -562,7 +640,7 @@ export class MovementControls {
 
   private refreshButtonStates(): void {
     const alive = this.playerState?.alive ?? true;
-    this.advanceBtn.disabled = !alive || !this.hasPath;
+    this.advanceBtn.disabled = !alive || !this.hasPath || !(this.playerState?.paused ?? true) || !(this.playerState?.stepMode ?? false);
     this.resetBtn.disabled = false;
   }
 }
