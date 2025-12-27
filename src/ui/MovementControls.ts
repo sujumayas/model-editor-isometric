@@ -5,6 +5,7 @@
 import { MovementTester, TileKind, ClickMode, SimulationSpeed } from '../movement/MovementTester';
 import { Editor } from '../editor/Editor';
 import { CardinalDirection, GridCoord, TileBehavior } from '../core/types';
+import { CharacterAnimationKey, CharacterDirection } from '../movement/characters/CharacterAnimator';
 import { PHASE_TWO_SCENARIOS, TEST_SCENARIOS, TestScenario } from '../movement/testMaps';
 
 interface PlayerUIState {
@@ -20,6 +21,10 @@ interface PlayerUIState {
   stepMode: boolean;
   destination: GridCoord | null;
   spawn: GridCoord | null;
+  characterId: string;
+  characterReady: boolean;
+  facing: CharacterDirection;
+  animation: CharacterAnimationKey;
 }
 
 export class MovementControls {
@@ -31,6 +36,7 @@ export class MovementControls {
   private modeButtons = new Map<ClickMode, HTMLButtonElement>();
   private kindButtons = new Map<TileKind, HTMLButtonElement>();
   private scenarioButtons = new Map<string, HTMLButtonElement>();
+  private characterButtons = new Map<string, HTMLButtonElement>();
   private selectionLabel: HTMLElement;
   private kindLabel: HTMLElement;
   private pathLabel: HTMLElement;
@@ -39,6 +45,7 @@ export class MovementControls {
   private nextMoveLabel: HTMLElement;
   private stepLabel: HTMLElement;
   private statusLabel: HTMLElement;
+  private characterLabel: HTMLElement;
   private stepToggleBtn: HTMLButtonElement;
   private advanceBtn: HTMLButtonElement;
   private resetBtn: HTMLButtonElement;
@@ -84,6 +91,7 @@ export class MovementControls {
     this.nextMoveLabel = document.createElement('div');
     this.stepLabel = document.createElement('div');
     this.statusLabel = document.createElement('div');
+    this.characterLabel = document.createElement('div');
 
     this.playPauseBtn = document.createElement('button');
     this.stepToggleBtn = document.createElement('button');
@@ -106,6 +114,7 @@ export class MovementControls {
     this.container.appendChild(this.renderLoadSection());
     this.container.appendChild(this.renderScenarioSection('Phase 1 Test Maps', TEST_SCENARIOS));
     this.container.appendChild(this.renderScenarioSection('Phase 2 Test Maps', PHASE_TWO_SCENARIOS));
+    this.container.appendChild(this.renderCharacterSection());
     this.container.appendChild(this.renderMovementSection());
     this.container.appendChild(this.renderModeSection());
     this.container.appendChild(this.renderKindSection());
@@ -169,6 +178,36 @@ export class MovementControls {
 
     group.appendChild(label);
     group.appendChild(buttons);
+    return group;
+  }
+
+  private renderCharacterSection(): HTMLElement {
+    const group = document.createElement('div');
+    group.className = 'control-group';
+
+    const label = document.createElement('div');
+    label.className = 'control-label';
+    label.textContent = 'Character Animation';
+
+    const buttons = document.createElement('div');
+    buttons.className = 'button-group';
+
+    this.tester.getCharacters().forEach((character) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tool-btn small';
+      btn.textContent = character.name;
+      btn.dataset.characterId = character.id;
+      btn.addEventListener('click', () => this.tester.setActiveCharacter(character.id));
+      this.characterButtons.set(character.id, btn);
+      buttons.appendChild(btn);
+    });
+
+    this.characterLabel.className = 'control-meta';
+
+    group.appendChild(label);
+    group.appendChild(buttons);
+    group.appendChild(this.characterLabel);
     return group;
   }
 
@@ -489,6 +528,10 @@ export class MovementControls {
       stepMode: false,
       destination: null,
       spawn: null,
+      characterId: this.tester.getActiveCharacterId(),
+      characterReady: false,
+      facing: 'se',
+      animation: 'idle',
     });
     return group;
   }
@@ -516,6 +559,13 @@ export class MovementControls {
       this.updateModeButtons(mode);
     });
 
+    this.tester.on('character:changed', ({ id, name, ready }) => {
+      const facing = (this.playerState?.facing ?? 'se').toUpperCase();
+      const animation = this.playerState?.animation ?? 'idle';
+      this.updateCharacterButtons(id);
+      this.characterLabel.textContent = `Character: ${name} • Facing: ${facing} • Animation: ${animation} (${ready ? 'ready' : 'loading...'})`;
+    });
+
     this.tester.on('level:changed', () => {
       this.updateSelectionStatus(null, { type: 'floor' });
       this.updatePathStatus(false, []);
@@ -540,6 +590,7 @@ export class MovementControls {
     this.updateKindButtons('floor');
     this.updatePlayPause(true);
     this.updateSpeedButtons(1);
+    this.updateCharacterButtons(this.tester.getActiveCharacterId());
     this.refreshButtonStates();
   }
 
@@ -568,6 +619,14 @@ export class MovementControls {
     });
   }
 
+  private updateCharacterButtons(active: string): void {
+    this.characterButtons.forEach((btn, id) => {
+      const isActive = id === active;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
   private updatePathStatus(hasPath: boolean, path: GridCoord[]): void {
     const hazardNote = this.playerState?.pathHasHazard ? ' (hazard ahead)' : '';
     if (hasPath && path.length > 1) {
@@ -579,6 +638,11 @@ export class MovementControls {
   }
 
   private updatePlayerStatus(state: PlayerUIState): void {
+    this.updateCharacterButtons(state.characterId);
+    const characterName = this.getCharacterName(state.characterId);
+    const facing = state.facing.toUpperCase();
+    const readiness = state.characterReady ? 'ready' : 'loading...';
+    this.characterLabel.textContent = `Character: ${characterName} • Facing: ${facing} • Animation: ${state.animation} (${readiness})`;
     this.hpLabel.textContent = `HP: ${state.hp}/${state.maxHp}`;
     const spawnText = state.spawn ? `Spawn: ${state.spawn.x}, ${state.spawn.y}` : 'Spawn: --';
     const destText = state.destination ? `Destination: ${state.destination.x}, ${state.destination.y}` : 'Destination: --';
@@ -612,6 +676,10 @@ export class MovementControls {
       btn.classList.toggle('active', isActive);
       btn.setAttribute('aria-pressed', String(isActive));
     });
+  }
+
+  private getCharacterName(id: string): string {
+    return this.tester.getCharacters().find((c) => c.id === id)?.name ?? id;
   }
 
   private syncProperties(behavior: TileBehavior): void {
