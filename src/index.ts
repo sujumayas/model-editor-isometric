@@ -16,6 +16,8 @@ import { MapControls } from './ui/MapControls';
 import { loadFromLocalStorage } from './level/LevelSerializer';
 import { MovementTester } from './movement/MovementTester';
 import { MovementControls } from './ui/MovementControls';
+import { ClopPersonalityTester } from './clops/ClopPersonalityTester';
+import { ClopPersonalityControls } from './ui/ClopPersonalityControls';
 
 // Global reference to editor for debugging
 declare global {
@@ -83,6 +85,14 @@ async function init(): Promise<void> {
       }
     );
     const movementControls = new MovementControls('movement-controls', movementTester, editor);
+    const clopTester = new ClopPersonalityTester(
+      {
+        canvas: '#clop-canvas',
+        container: '#canvas-stack',
+        tileRegistry,
+      }
+    );
+    const clopControls = new ClopPersonalityControls('clop-controls', clopTester, editor);
 
     // Select first tile by default
     tilePalette.selectTile(0);
@@ -90,6 +100,7 @@ async function init(): Promise<void> {
     // Start render loop
     editor.start();
     movementTester.start();
+    clopTester.start();
 
     setupCanvasToggle();
 
@@ -120,18 +131,24 @@ function setupCanvasToggle(): void {
   const sidebarTitle = document.getElementById('sidebar-active-title');
   const editorCanvas = document.getElementById('editor-canvas');
   const movementCanvas = document.getElementById('movement-canvas');
+  const clopCanvas = document.getElementById('clop-canvas');
   const editorPane = document.getElementById('editor-pane');
   const movementPane = document.getElementById('movement-pane');
+  const clopPane = document.getElementById('clop-pane');
 
-  if (!toggle || !editorCanvas || !movementCanvas || !editorPane || !movementPane) return;
+  if (!toggle || !editorCanvas || !movementCanvas || !clopCanvas || !editorPane || !movementPane || !clopPane) return;
 
-  const setMode = (mode: 'editor' | 'movement'): void => {
+  const setMode = (mode: 'editor' | 'movement' | 'clop'): void => {
     const isEditor = mode === 'editor';
+    const isMovement = mode === 'movement';
+    const isClop = mode === 'clop';
 
     editorCanvas.classList.toggle('inactive', !isEditor);
-    movementCanvas.classList.toggle('inactive', isEditor);
+    movementCanvas.classList.toggle('inactive', !isMovement);
+    clopCanvas.classList.toggle('inactive', !isClop);
     editorPane.classList.toggle('active', isEditor);
-    movementPane.classList.toggle('active', !isEditor);
+    movementPane.classList.toggle('active', isMovement);
+    clopPane.classList.toggle('active', isClop);
 
     toggle.querySelectorAll('button[data-canvas]').forEach((button) => {
       const buttonMode = (button as HTMLButtonElement).dataset.canvas;
@@ -139,7 +156,7 @@ function setupCanvasToggle(): void {
     });
 
     if (sidebarTitle) {
-      sidebarTitle.textContent = isEditor ? 'Map Editor' : 'Movement Tester';
+      sidebarTitle.textContent = isEditor ? 'Map Editor' : isMovement ? 'Movement Tester' : 'Clop Personalities';
     }
   };
 
@@ -148,7 +165,10 @@ function setupCanvasToggle(): void {
     const btn = target.closest('button[data-canvas]') as HTMLButtonElement | null;
     if (!btn) return;
 
-    const mode = btn.dataset.canvas === 'movement' ? 'movement' : 'editor';
+    const mode =
+      btn.dataset.canvas === 'movement' ? 'movement' :
+      btn.dataset.canvas === 'clop' ? 'clop' :
+      'editor';
     setMode(mode);
   });
 
