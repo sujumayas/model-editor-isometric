@@ -5,6 +5,7 @@ export interface TestScenario {
   id: string;
   name: string;
   description: string;
+  phase: 1 | 2;
   build(): Level;
 }
 
@@ -146,24 +147,104 @@ export const TEST_SCENARIOS: TestScenario[] = [
     id: 'slow-path',
     name: 'Test Map 1',
     description: 'Simple path with slow tiles.',
+    phase: 1,
     build: buildSlowPath,
   },
   {
     id: 'hole-maze',
     name: 'Test Map 2',
     description: 'Maze featuring holes and blockers.',
+    phase: 1,
     build: buildHoleMaze,
   },
   {
     id: 'conveyor-puzzle',
     name: 'Test Map 3',
     description: 'Conveyor loop that pushes the token around.',
+    phase: 1,
     build: buildConveyorPuzzle,
   },
   {
     id: 'hazard-run',
     name: 'Test Map 4',
     description: 'Hazard gauntlet with a blocking door.',
+    phase: 1,
     build: buildHazardGauntlet,
   },
+];
+
+function buildStraightLine(): Level {
+  const level = buildBaseLevel('Test Map 5: Straight Shot', 10, 3);
+  applyBehavior(level, { x: 1, y: 1 }, { type: 'spawn' });
+  applyBehavior(level, { x: 8, y: 1 }, { type: 'exit' });
+  return level;
+}
+
+function buildObstacleMaze(): Level {
+  const level = buildBaseLevel('Test Map 6: Obstacle Maze', 10, 8);
+  applyBehavior(level, { x: 1, y: 6 }, { type: 'spawn' });
+  applyBehavior(level, { x: 8, y: 1 }, { type: 'exit' });
+
+  placeBlockers(level, [
+    { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 }, { x: 3, y: 4 },
+    { x: 5, y: 3 }, { x: 6, y: 3 }, { x: 7, y: 3 }, { x: 7, y: 4 },
+    { x: 2, y: 6 }, { x: 4, y: 6 }, { x: 6, y: 6 }, { x: 7, y: 6 },
+  ]);
+
+  placeBehaviors(level, [
+    { x: 5, y: 5 }, { x: 5, y: 4 }, { x: 5, y: 2 },
+  ], { type: 'slow' });
+
+  return level;
+}
+
+function buildHazardChoice(): Level {
+  const level = buildBaseLevel('Test Map 7: Hazard Shortcut', 9, 7);
+  applyBehavior(level, { x: 1, y: 5 }, { type: 'spawn' });
+  applyBehavior(level, { x: 7, y: 1 }, { type: 'exit' });
+
+  placeBlockers(level, [
+    { x: 3, y: 2 }, { x: 3, y: 3 }, { x: 3, y: 4 },
+    { x: 5, y: 1 }, { x: 5, y: 2 }, { x: 5, y: 3 },
+    { x: 5, y: 4 }, { x: 5, y: 5 },
+  ]);
+
+  placeBehaviors(level, [
+    { x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 },
+  ], { type: 'slow' });
+
+  placeBehaviors(level, [
+    { x: 4, y: 2 }, { x: 4, y: 1 }, { x: 6, y: 1 }, { x: 6, y: 2 },
+  ], { type: 'hazard-burn', damage: 1 });
+
+  return level;
+}
+
+export const PHASE_TWO_SCENARIOS: TestScenario[] = [
+  {
+    id: 'straight-shot',
+    name: 'Test Map 5',
+    description: 'Straight line to the exit (basic pathfinding).',
+    phase: 2,
+    build: buildStraightLine,
+  },
+  {
+    id: 'obstacle-maze',
+    name: 'Test Map 6',
+    description: 'Maze that forces rerouting around blockers.',
+    phase: 2,
+    build: buildObstacleMaze,
+  },
+  {
+    id: 'hazard-shortcut',
+    name: 'Test Map 7',
+    description: 'Choose between safe detour or hazardous shortcut.',
+    phase: 2,
+    build: buildHazardChoice,
+  },
+];
+
+export const TEST_SCENARIOS_ALL: TestScenario[] = [
+  ...TEST_SCENARIOS,
+  ...PHASE_TWO_SCENARIOS,
 ];
