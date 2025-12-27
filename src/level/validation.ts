@@ -122,7 +122,7 @@ export function validateTilePlacement(data: unknown): TilePlacement {
  * Get validation errors as readable strings
  */
 export function getValidationErrors(error: z.ZodError): string[] {
-  return error.errors.map((err) => {
+  return error.errors.map((err: z.ZodIssue) => {
     const path = err.path.join('.');
     return `${path}: ${err.message}`;
   });
