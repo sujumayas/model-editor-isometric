@@ -14,9 +14,17 @@ import { Canvas } from '../engine/Canvas';
 import { Camera } from '../engine/Camera';
 import { Renderer } from '../engine/Renderer';
 import { TileRegistry } from '../assets/TileRegistry';
+import { AssetLoader } from '../assets/AssetLoader';
 import { Level } from '../level/Level';
 import { deserializeLevel, loadLevelFromFile, serializeLevel } from '../level/LevelSerializer';
 import { ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from '../core/constants';
+import {
+  CharacterAnimator,
+  CharacterAnimationKey,
+  CharacterDefinition,
+  CharacterDirection,
+} from './characters/CharacterAnimator';
+import { BOAR_CHARACTER } from './characters/boar';
 
 export type TileKind = TileBehaviorType;
 export type ClickMode = 'move' | 'edit';
@@ -35,6 +43,7 @@ export interface MovementTesterEventMap {
   'mode:changed': { mode: ClickMode };
   'level:changed': { level: Level };
   'path:updated': { hasPath: boolean; path: GridCoord[] };
+  'character:changed': { id: string; name: string; ready: boolean };
   'player:updated': {
     position: GridCoord;
     hp: number;
@@ -49,6 +58,10 @@ export interface MovementTesterEventMap {
     paused: boolean;
     speed: SimulationSpeed;
     pathHasHazard: boolean;
+    facing: CharacterDirection;
+    characterId: string;
+    animation: CharacterAnimationKey;
+    characterReady: boolean;
   };
 }
 
@@ -93,6 +106,7 @@ interface PlayerState {
   lastDamageAt: number;
   pathHasHazard: boolean;
   state: ClopState;
+  facing: CharacterDirection;
 }
 
 export class MovementTester {
@@ -105,6 +119,12 @@ export class MovementTester {
   private hovered: GridCoord | null = null;
   private clickMode: ClickMode = 'move';
   private listeners = new Map<MovementTesterEvent, Set<MovementListener>>();
+  private characterDefinitions: CharacterDefinition[] = [BOAR_CHARACTER];
+  private characterAnimators = new Map<string, CharacterAnimator>();
+  private characterLoader = new AssetLoader();
+  private activeAnimator: CharacterAnimator;
+  private activeCharacterId: string;
+  private characterReady = false;
 
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
@@ -137,6 +157,7 @@ export class MovementTester {
     lastDamageAt: 0,
     pathHasHazard: false,
     state: 'normal',
+    facing: 'se',
   };
 
   constructor(options: MovementTesterOptions) {
@@ -150,6 +171,16 @@ export class MovementTester {
     this.camera = new Camera({ zoom: 2 });
     this.renderer = new Renderer(this.canvas, this.camera, this.tileRegistry);
     this.renderer.setOptions({ showHover: false, showSelection: false });
+
+    const defaultCharacter = this.characterDefinitions[0];
+    if (!defaultCharacter) {
+      throw new Error('No characters configured for movement tester');
+    }
+    this.activeCharacterId = defaultCharacter.id;
+    this.activeAnimator = this.createAnimator(defaultCharacter);
+    this.characterReady = this.activeAnimator.isReady();
+    this.emitCharacterChanged();
+    this.preloadCharacter(this.activeAnimator);
 
     this.level = Level.createDefault('Movement Test');
     this.setupEventListeners();
@@ -174,6 +205,7 @@ export class MovementTester {
 
   private emitPlayerState(): void {
     const nextStep = this.player.path[this.player.segmentIndex + 1] ?? null;
+    const animation = this.getAnimationKey(this.isPaused);
     this.emit('player:updated', {
       position: { ...this.player.position },
       hp: this.player.hp,
@@ -188,12 +220,34 @@ export class MovementTester {
       paused: this.isPaused,
       speed: this.speedMultiplier,
       pathHasHazard: this.player.pathHasHazard,
+      facing: this.player.facing,
+      characterId: this.activeCharacterId,
+      animation,
+      characterReady: this.characterReady,
+    });
+  }
+
+  private emitCharacterChanged(): void {
+    const definition = this.characterDefinitions.find((c) => c.id === this.activeCharacterId);
+    if (!definition) return;
+    this.emit('character:changed', {
+      id: definition.id,
+      name: definition.name,
+      ready: this.characterReady,
     });
   }
 
   // Public API --------------------------------------------------------------
   getLevel(): Level {
     return this.level;
+  }
+
+  getCharacters(): Array<{ id: string; name: string }> {
+    return this.characterDefinitions.map(({ id, name }) => ({ id, name }));
+  }
+
+  getActiveCharacterId(): string {
+    return this.activeCharacterId;
   }
 
   getSelectedCoord(): GridCoord | null {
@@ -223,6 +277,20 @@ export class MovementTester {
       };
     }
     return behavior;
+  }
+
+  setActiveCharacter(id: string): void {
+    if (this.activeCharacterId === id) return;
+    const definition = this.characterDefinitions.find((c) => c.id === id);
+    if (!definition) return;
+    this.activeCharacterId = id;
+    this.activeAnimator = this.createAnimator(definition);
+    this.characterReady = this.activeAnimator.isReady();
+    this.emitCharacterChanged();
+    if (!this.characterReady) {
+      this.preloadCharacter(this.activeAnimator);
+    }
+    this.emitPlayerState();
   }
 
   setClickMode(mode: ClickMode): void {
@@ -350,6 +418,57 @@ export class MovementTester {
     this.resetPlayerPosition();
   }
 
+  private createAnimator(definition: CharacterDefinition): CharacterAnimator {
+    const existing = this.characterAnimators.get(definition.id);
+    if (existing) return existing;
+    const animator = new CharacterAnimator(definition, this.characterLoader);
+    this.characterAnimators.set(definition.id, animator);
+    return animator;
+  }
+
+  private preloadCharacter(animator: CharacterAnimator): void {
+    animator.load().then(() => {
+      if (animator !== this.activeAnimator) return;
+      this.characterReady = true;
+      this.emitCharacterChanged();
+      this.emitPlayerState();
+    }).catch((error) => {
+      console.error('Failed to load character frames', error);
+    });
+  }
+
+  private updateCharacterAnimation(dt: number): void {
+    if (!this.activeAnimator) return;
+    const animation = this.getAnimationKey(this.isPaused);
+    const delta = this.isPaused ? 0 : dt;
+    this.activeAnimator.update(animation, this.player.facing, delta, this.speedMultiplier);
+  }
+
+  private getAnimationKey(forceIdle: boolean): CharacterAnimationKey {
+    if (forceIdle || !this.player.alive) return 'idle';
+    if (this.player.moving && this.player.isAnimating) {
+      return 'run';
+    }
+    return 'idle';
+  }
+
+  private getFacingForStep(current: GridCoord, next: GridCoord): CharacterDirection {
+    const dx = next.x - current.x;
+    const dy = next.y - current.y;
+    if (dx === 1 && dy === 0) return 'se';
+    if (dx === -1 && dy === 0) return 'nw';
+    if (dy === 1 && dx === 0) return 'sw';
+    return 'ne';
+  }
+
+  private updateFacingForPath(): void {
+    const current = this.player.path[this.player.segmentIndex];
+    const next = this.player.path[this.player.segmentIndex + 1];
+    if (current && next) {
+      this.player.facing = this.getFacingForStep(current, next);
+    }
+  }
+
   // Internal state ----------------------------------------------------------
   private setupEventListeners(): void {
     const canvasEl = this.canvas.element;
@@ -421,6 +540,7 @@ export class MovementTester {
     this.player.isAnimating = false;
     this.player.pendingStep = !this.player.stepMode;
     this.player.pathHasHazard = false;
+    this.player.facing = 'se';
     this.emit('path:updated', { hasPath: false, path: this.player.path });
     this.planDefaultDestination();
     this.emitPlayerState();
@@ -492,6 +612,7 @@ export class MovementTester {
     this.player.isAnimating = false;
     this.player.pendingStep = !this.player.stepMode;
     this.player.pathHasHazard = this.pathContainsHazard(path, 1);
+    this.updateFacingForPath();
     this.updateClopState();
     this.emit('path:updated', { hasPath: true, path });
     this.emitPlayerState();
@@ -611,19 +732,28 @@ export class MovementTester {
   }
 
   private update(dt: number): void {
-    if (!this.player.alive) return;
+    if (!this.player.alive) {
+      this.updateCharacterAnimation(dt);
+      return;
+    }
 
     if (!this.player.destination && this.exitTile) {
       this.movePlayerTo(this.exitTile);
     }
 
-    if (this.isPaused) return;
+    if (this.isPaused) {
+      this.updateCharacterAnimation(0);
+      return;
+    }
 
     if (this.shouldStartNextSegment()) {
       this.beginSegment();
     }
 
-    if (!this.player.isAnimating || this.player.path.length < 2) return;
+    if (!this.player.isAnimating || this.player.path.length < 2) {
+      this.updateCharacterAnimation(dt);
+      return;
+    }
 
     const currentIndex = this.player.segmentIndex;
     const nextIndex = currentIndex + 1;
@@ -632,6 +762,7 @@ export class MovementTester {
 
     if (!current || !next) {
       this.stopMovement();
+      this.updateCharacterAnimation(dt);
       return;
     }
 
@@ -659,6 +790,8 @@ export class MovementTester {
         y: current.y + (next.y - current.y) * t,
       };
     }
+
+    this.updateCharacterAnimation(dt);
   }
 
   private shouldStartNextSegment(): boolean {
@@ -673,6 +806,7 @@ export class MovementTester {
     const next = this.player.path[this.player.segmentIndex + 1];
     if (!next) return;
     this.player.currentStepDuration = this.getStepDuration(next);
+    this.updateFacingForPath();
     this.player.isAnimating = true;
     this.player.pendingStep = false;
   }
@@ -760,6 +894,7 @@ export class MovementTester {
     this.player.isAnimating = false;
     this.player.pendingStep = true; // Forced movement ignores step gating
     this.player.pathHasHazard = this.pathContainsHazard(this.player.path, 1);
+    this.updateFacingForPath();
     this.updateClopState();
     this.emit('path:updated', { hasPath: true, path: this.player.path });
     this.emitPlayerState();
@@ -782,6 +917,7 @@ export class MovementTester {
     this.player.isAnimating = false;
     this.player.pendingStep = !this.player.stepMode;
     this.player.pathHasHazard = this.pathContainsHazard(path, 1);
+    this.updateFacingForPath();
     this.updateClopState();
     this.emit('path:updated', { hasPath: true, path });
     this.emitPlayerState();
@@ -886,24 +1022,40 @@ export class MovementTester {
       this.player.state === 'hurt' ? PLAYER_HURT_COLOR :
       this.player.state === 'scared' ? PLAYER_SCARED_COLOR :
       PLAYER_COLOR;
-    ctx.fillStyle = isHurtFlash ? PLAYER_HURT_COLOR : baseColor;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y + ISO_TILE_HEIGHT / 2, ISO_TILE_WIDTH / 4, 0, Math.PI * 2);
-    ctx.fill();
+    const frame = this.activeAnimator?.getCurrentFrame();
+    if (frame && this.characterReady) {
+      const anchor = this.activeAnimator.anchor;
+      const size = this.activeAnimator.size;
+      const drawX = pos.x - anchor.x;
+      const drawY = pos.y + ISO_TILE_HEIGHT / 2 - anchor.y;
+      ctx.drawImage(frame, drawX, drawY, size.width, size.height);
+      if (isHurtFlash) {
+        ctx.fillStyle = 'rgba(255,132,132,0.35)';
+        ctx.fillRect(drawX, drawY, size.width, size.height);
+      }
+    } else {
+      ctx.fillStyle = isHurtFlash ? PLAYER_HURT_COLOR : baseColor;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y + ISO_TILE_HEIGHT / 2, ISO_TILE_WIDTH / 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-    // HP indicator
+    this.renderHpIndicator(ctx, pos.x, pos.y);
+  }
+
+  private renderHpIndicator(ctx: CanvasRenderingContext2D, centerX: number, centerY: number): void {
     const hpText = `${this.player.hp}/${this.player.maxHp}`;
     ctx.fillStyle = 'rgba(15,15,20,0.75)';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 2;
-    this.drawRoundedRect(ctx, pos.x - 16, pos.y - 6, 32, 14, 6);
+    this.drawRoundedRect(ctx, centerX - 16, centerY - 6, 32, 14, 6);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#fff';
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(hpText, pos.x, pos.y + 1);
+    ctx.fillText(hpText, centerX, centerY + 1);
   }
 
   private drawDiamond(
