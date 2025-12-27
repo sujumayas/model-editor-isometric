@@ -16,6 +16,8 @@ import { MapControls } from './ui/MapControls';
 import { loadFromLocalStorage } from './level/LevelSerializer';
 import { MovementTester } from './movement/MovementTester';
 import { MovementControls } from './ui/MovementControls';
+import { AISimulator } from './simulation';
+import { AISimulatorControls } from './ui/AISimulatorControls';
 
 // Global reference to editor for debugging
 declare global {
@@ -84,12 +86,22 @@ async function init(): Promise<void> {
     );
     const movementControls = new MovementControls('movement-controls', movementTester, editor);
 
+    // Initialize AI Simulator
+    const aiSimulator = new AISimulator({
+      canvas: '#ai-simulator-canvas',
+      container: '#canvas-stack',
+      tileRegistry,
+      initialMode: 'step',
+    });
+    const aiSimulatorControls = new AISimulatorControls('ai-simulator-controls', aiSimulator, editor);
+
     // Select first tile by default
     tilePalette.selectTile(0);
 
-    // Start render loop
+    // Start render loops
     editor.start();
     movementTester.start();
+    aiSimulator.start();
 
     setupCanvasToggle();
 
@@ -120,26 +132,41 @@ function setupCanvasToggle(): void {
   const sidebarTitle = document.getElementById('sidebar-active-title');
   const editorCanvas = document.getElementById('editor-canvas');
   const movementCanvas = document.getElementById('movement-canvas');
+  const aiSimulatorCanvas = document.getElementById('ai-simulator-canvas');
   const editorPane = document.getElementById('editor-pane');
   const movementPane = document.getElementById('movement-pane');
+  const aiSimulatorPane = document.getElementById('ai-simulator-pane');
 
-  if (!toggle || !editorCanvas || !movementCanvas || !editorPane || !movementPane) return;
+  if (!toggle || !editorCanvas || !movementCanvas || !aiSimulatorCanvas ||
+      !editorPane || !movementPane || !aiSimulatorPane) return;
 
-  const setMode = (mode: 'editor' | 'movement'): void => {
-    const isEditor = mode === 'editor';
+  type CanvasMode = 'editor' | 'movement' | 'ai-simulator';
 
-    editorCanvas.classList.toggle('inactive', !isEditor);
-    movementCanvas.classList.toggle('inactive', isEditor);
-    editorPane.classList.toggle('active', isEditor);
-    movementPane.classList.toggle('active', !isEditor);
+  const setMode = (mode: CanvasMode): void => {
+    // Update canvas visibility
+    editorCanvas.classList.toggle('inactive', mode !== 'editor');
+    movementCanvas.classList.toggle('inactive', mode !== 'movement');
+    aiSimulatorCanvas.classList.toggle('inactive', mode !== 'ai-simulator');
 
+    // Update sidebar pane visibility
+    editorPane.classList.toggle('active', mode === 'editor');
+    movementPane.classList.toggle('active', mode === 'movement');
+    aiSimulatorPane.classList.toggle('active', mode === 'ai-simulator');
+
+    // Update button states
     toggle.querySelectorAll('button[data-canvas]').forEach((button) => {
       const buttonMode = (button as HTMLButtonElement).dataset.canvas;
       button.classList.toggle('active', buttonMode === mode);
     });
 
+    // Update sidebar title
     if (sidebarTitle) {
-      sidebarTitle.textContent = isEditor ? 'Map Editor' : 'Movement Tester';
+      const titles: Record<CanvasMode, string> = {
+        'editor': 'Map Editor',
+        'movement': 'Movement Tester',
+        'ai-simulator': 'AI Simulator',
+      };
+      sidebarTitle.textContent = titles[mode];
     }
   };
 
@@ -148,8 +175,10 @@ function setupCanvasToggle(): void {
     const btn = target.closest('button[data-canvas]') as HTMLButtonElement | null;
     if (!btn) return;
 
-    const mode = btn.dataset.canvas === 'movement' ? 'movement' : 'editor';
-    setMode(mode);
+    const mode = btn.dataset.canvas as CanvasMode;
+    if (mode === 'editor' || mode === 'movement' || mode === 'ai-simulator') {
+      setMode(mode);
+    }
   });
 
   setMode('editor');

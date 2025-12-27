@@ -8,3 +8,5 @@ export * from './Toolbar';
 export * from './StatusBar';
 export * from './ViewControls';
 export * from './MapControls';
+export * from './MovementControls';
+export * from './AISimulatorControls';

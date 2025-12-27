@@ -317,7 +317,7 @@
       gap: 6px;
     }
   </style>
-  <script type="module" crossorigin src="/assets/index-CTm-em-b.js"></script>
+  <script type="module" crossorigin src="/assets/index-BQGORcpx.js"></script>
 </head>
 <body>
   <div id="app">
@@ -353,17 +353,25 @@
           <div id="movement-controls"></div>
         </div>
       </div>
+      <div class="sidebar-pane" id="ai-simulator-pane">
+        <div class="panel" id="ai-simulator-panel">
+          <div class="panel-header">AI Simulator</div>
+          <div id="ai-simulator-controls"></div>
+        </div>
+      </div>
     </div>
     <div id="canvas-container">
       <div id="canvas-top-bar">
         <div class="button-group" id="canvas-mode-toggle">
           <button class="tool-btn small active" data-canvas="editor">Editing</button>
-          <button class="tool-btn small" data-canvas="movement">Movement Testing</button>
+          <button class="tool-btn small" data-canvas="movement">Movement</button>
+          <button class="tool-btn small" data-canvas="ai-simulator">AI Simulator</button>
         </div>
       </div>
       <div id="canvas-stack">
         <canvas id="editor-canvas" class="canvas-layer"></canvas>
         <canvas id="movement-canvas" class="canvas-layer inactive"></canvas>
+        <canvas id="ai-simulator-canvas" class="canvas-layer inactive"></canvas>
       </div>
       <div id="status-bar">
         <span id="status-position">Position: --</span>
