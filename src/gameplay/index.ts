@@ -7,7 +7,8 @@
 export * from './types';
 
 // Behaviors
-export { TileBehavior, BaseTileBehavior } from './behaviors/BaseTileBehavior';
+export type { TileBehavior } from './behaviors/BaseTileBehavior';
+export { BaseTileBehavior } from './behaviors/BaseTileBehavior';
 export { FloorBehavior } from './behaviors/FloorBehavior';
 export { BlockerBehavior } from './behaviors/BlockerBehavior';
 export { SlowBehavior } from './behaviors/SlowBehavior';
