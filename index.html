@@ -43,18 +43,15 @@
       top: 0;
       background: #16213e;
       z-index: 2;
-      padding-bottom: 4px;
+      padding-bottom: 8px;
     }
 
-    #sidebar-tabs {
-      display: flex;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    #sidebar-tabs .tool-btn.small {
-      flex: 1;
-      justify-content: center;
+    .sidebar-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f1f4ff;
+      letter-spacing: 0.02em;
+      margin-bottom: 6px;
     }
 
     .sidebar-pane {
@@ -325,11 +322,7 @@
   <div id="app">
     <div id="sidebar">
       <div id="sidebar-header">
-        <div class="panel-header">Workspace</div>
-        <div class="button-group" id="sidebar-tabs">
-          <button class="tool-btn small active" data-pane="editor-pane">Map Editor</button>
-          <button class="tool-btn small" data-pane="movement-pane">Movement Tester</button>
-        </div>
+        <h2 class="sidebar-title" id="sidebar-active-title">Map Editor</h2>
       </div>
       <div class="sidebar-pane active" id="editor-pane">
         <div class="panel" id="toolbar-panel">
