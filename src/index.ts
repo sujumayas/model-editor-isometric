@@ -117,65 +117,42 @@ async function init(): Promise<void> {
 
 function setupCanvasToggle(): void {
   const toggle = document.getElementById('canvas-mode-toggle');
-  const sidebarTabs = document.getElementById('sidebar-tabs');
+  const sidebarTitle = document.getElementById('sidebar-active-title');
   const editorCanvas = document.getElementById('editor-canvas');
   const movementCanvas = document.getElementById('movement-canvas');
   const editorPane = document.getElementById('editor-pane');
   const movementPane = document.getElementById('movement-pane');
 
-  if (!toggle || !editorCanvas || !movementCanvas || !sidebarTabs || !editorPane || !movementPane) return;
+  if (!toggle || !editorCanvas || !movementCanvas || !editorPane || !movementPane) return;
+
+  const setMode = (mode: 'editor' | 'movement'): void => {
+    const isEditor = mode === 'editor';
+
+    editorCanvas.classList.toggle('inactive', !isEditor);
+    movementCanvas.classList.toggle('inactive', isEditor);
+    editorPane.classList.toggle('active', isEditor);
+    movementPane.classList.toggle('active', !isEditor);
+
+    toggle.querySelectorAll('button[data-canvas]').forEach((button) => {
+      const buttonMode = (button as HTMLButtonElement).dataset.canvas;
+      button.classList.toggle('active', buttonMode === mode);
+    });
+
+    if (sidebarTitle) {
+      sidebarTitle.textContent = isEditor ? 'Map Editor' : 'Movement Tester';
+    }
+  };
 
   toggle.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     const btn = target.closest('button[data-canvas]') as HTMLButtonElement | null;
     if (!btn) return;
 
-    const mode = btn.dataset.canvas;
-    if (mode === 'editor') {
-      editorCanvas.classList.remove('inactive');
-      movementCanvas.classList.add('inactive');
-      editorPane.classList.add('active');
-      movementPane.classList.remove('active');
-    } else if (mode === 'movement') {
-      movementCanvas.classList.remove('inactive');
-      editorCanvas.classList.add('inactive');
-      movementPane.classList.add('active');
-      editorPane.classList.remove('active');
-    }
-
-    toggle.querySelectorAll('button[data-canvas]').forEach((button) => {
-      button.classList.toggle('active', (button as HTMLButtonElement).dataset.canvas === mode);
-    });
-
-    sidebarTabs.querySelectorAll('button[data-pane]').forEach((button) => {
-      const paneId = (button as HTMLButtonElement).dataset.pane;
-      const isActive = paneId === `${mode}-pane`;
-      button.classList.toggle('active', isActive);
-    });
+    const mode = btn.dataset.canvas === 'movement' ? 'movement' : 'editor';
+    setMode(mode);
   });
 
-  sidebarTabs.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    const btn = target.closest('button[data-pane]') as HTMLButtonElement | null;
-    if (!btn) return;
-
-    const pane = btn.dataset.pane;
-    if (pane === 'editor-pane') {
-      editorCanvas.classList.remove('inactive');
-      movementCanvas.classList.add('inactive');
-      editorPane.classList.add('active');
-      movementPane.classList.remove('active');
-      toggle.querySelector('button[data-canvas="editor"]')?.classList.add('active');
-      toggle.querySelector('button[data-canvas="movement"]')?.classList.remove('active');
-    } else if (pane === 'movement-pane') {
-      movementCanvas.classList.remove('inactive');
-      editorCanvas.classList.add('inactive');
-      movementPane.classList.add('active');
-      editorPane.classList.remove('active');
-      toggle.querySelector('button[data-canvas="movement"]')?.classList.add('active');
-      toggle.querySelector('button[data-canvas="editor"]')?.classList.remove('active');
-    }
-  });
+  setMode('editor');
 }
 
 // Start the application when DOM is ready
