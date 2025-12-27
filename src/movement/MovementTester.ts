@@ -21,6 +21,8 @@ import { ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from '../core/constants';
 export type TileKind = TileBehaviorType;
 export type ClickMode = 'move' | 'edit';
 export type MovementMode = 'auto' | 'step';
+export type ClopState = 'normal' | 'scared' | 'hurt';
+export type SimulationSpeed = 1 | 2 | 4;
 
 export interface MovementTesterOptions {
   canvas: HTMLCanvasElement | string;
@@ -42,6 +44,11 @@ export interface MovementTesterEventMap {
     stepMode: boolean;
     reachedExit: boolean;
     destination: GridCoord | null;
+    nextStep: GridCoord | null;
+    state: ClopState;
+    paused: boolean;
+    speed: SimulationSpeed;
+    pathHasHazard: boolean;
   };
 }
 
@@ -64,6 +71,7 @@ const OVERLAY_COLORS: Record<TileBehaviorType, string> = {
 const SELECTION_COLOR = 'rgba(74, 255, 158, 0.5)';
 const PATH_COLOR = 'rgba(74, 158, 255, 0.65)';
 const PLAYER_COLOR = 'rgba(74, 255, 158, 0.9)';
+const PLAYER_SCARED_COLOR = 'rgba(255, 221, 94, 0.9)';
 const PLAYER_HURT_COLOR = 'rgba(255, 132, 132, 0.9)';
 
 interface PlayerState {
@@ -83,6 +91,8 @@ interface PlayerState {
   stepMode: boolean;
   pendingStep: boolean;
   lastDamageAt: number;
+  pathHasHazard: boolean;
+  state: ClopState;
 }
 
 export class MovementTester {
@@ -99,16 +109,20 @@ export class MovementTester {
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private isRunning = false;
+  private isPaused = true;
 
   private readonly baseStepDuration = 0.25;
   private defaultHazardDamage = 1;
   private defaultConveyorDirection: CardinalDirection = 'east';
+  private readonly hazardPenalty = 2.5;
+  private exitTile: GridCoord | null = null;
+  private speedMultiplier: SimulationSpeed = 1;
 
   private player: PlayerState = {
     position: { x: 0, y: 0 },
     spawn: null,
-    hp: 3,
-    maxHp: 3,
+    hp: 2,
+    maxHp: 2,
     alive: true,
     reachedExit: false,
     destination: null,
@@ -121,6 +135,8 @@ export class MovementTester {
     stepMode: false,
     pendingStep: true,
     lastDamageAt: 0,
+    pathHasHazard: false,
+    state: 'normal',
   };
 
   constructor(options: MovementTesterOptions) {
@@ -157,6 +173,7 @@ export class MovementTester {
   }
 
   private emitPlayerState(): void {
+    const nextStep = this.player.path[this.player.segmentIndex + 1] ?? null;
     this.emit('player:updated', {
       position: { ...this.player.position },
       hp: this.player.hp,
@@ -166,6 +183,11 @@ export class MovementTester {
       stepMode: this.player.stepMode,
       reachedExit: this.player.reachedExit,
       destination: this.player.destination,
+      nextStep,
+      state: this.player.state,
+      paused: this.isPaused,
+      speed: this.speedMultiplier,
+      pathHasHazard: this.player.pathHasHazard,
     });
   }
 
@@ -209,6 +231,20 @@ export class MovementTester {
     this.emit('mode:changed', { mode });
   }
 
+  setPaused(paused: boolean): void {
+    if (this.isPaused === paused) return;
+    this.isPaused = paused;
+    this.emitPlayerState();
+  }
+
+  setSpeed(speed: SimulationSpeed): void {
+    const allowed: SimulationSpeed[] = [1, 2, 4];
+    if (!allowed.includes(speed)) return;
+    if (this.speedMultiplier === speed) return;
+    this.speedMultiplier = speed;
+    this.emitPlayerState();
+  }
+
   setStepMode(enabled: boolean): void {
     this.player.stepMode = enabled;
     this.player.pendingStep = !enabled;
@@ -227,6 +263,7 @@ export class MovementTester {
 
   advanceTurn(): void {
     if (!this.player.alive) return;
+    if (!this.player.stepMode) return;
     this.player.pendingStep = true;
   }
 
@@ -244,6 +281,8 @@ export class MovementTester {
 
   setLevel(level: Level): void {
     this.level = level;
+    this.isPaused = true;
+    this.exitTile = this.findExitTile();
     this.selected = null;
     this.hovered = null;
     this.resetPlayerPosition();
@@ -259,13 +298,20 @@ export class MovementTester {
 
   setTileBehavior(coord: GridCoord, behavior: TileBehavior | null): void {
     if (!this.level.isInBounds(coord)) return;
+    const previousBehavior = this.getTileBehavior(coord);
     const wasBlocked = this.isBlocked(coord);
     this.level.setTileBehavior(coord, behavior);
     // Update spawn reference if a spawn tile is placed/removed
     if (behavior?.type === 'spawn' || this.player.spawn && this.sameCoord(this.player.spawn, coord)) {
       this.player.spawn = this.findSpawnPoint();
     }
+    if (behavior?.type === 'exit' || previousBehavior?.type === 'exit') {
+      this.exitTile = this.findExitTile();
+      this.planDefaultDestination();
+    }
     if (this.player.destination && this.player.moving && wasBlocked !== this.isBlocked(coord)) {
+      this.rebuildPathToDestination();
+    } else if (this.player.destination && this.player.moving) {
       this.rebuildPathToDestination();
     }
     this.emitSelection(coord);
@@ -300,6 +346,7 @@ export class MovementTester {
   }
 
   resetPlayer(): void {
+    this.isPaused = true;
     this.resetPlayerPosition();
   }
 
@@ -364,6 +411,7 @@ export class MovementTester {
     this.player.hp = this.player.maxHp;
     this.player.alive = true;
     this.player.reachedExit = false;
+    this.player.state = 'normal';
     this.player.destination = null;
     this.player.path = [start];
     this.player.segmentIndex = 0;
@@ -372,7 +420,9 @@ export class MovementTester {
     this.player.moving = false;
     this.player.isAnimating = false;
     this.player.pendingStep = !this.player.stepMode;
+    this.player.pathHasHazard = false;
     this.emit('path:updated', { hasPath: false, path: this.player.path });
+    this.planDefaultDestination();
     this.emitPlayerState();
   }
 
@@ -396,6 +446,19 @@ export class MovementTester {
     }
   }
 
+  private planDefaultDestination(): void {
+    if (!this.exitTile) {
+      this.player.destination = null;
+      this.player.moving = false;
+      this.player.pathHasHazard = false;
+      this.updateClopState();
+      this.emit('path:updated', { hasPath: false, path: this.player.path });
+      this.emitPlayerState();
+      return;
+    }
+    this.movePlayerTo(this.exitTile);
+  }
+
   // Movement ----------------------------------------------------------------
   private movePlayerTo(target: GridCoord): void {
     if (!this.level.isInBounds(target) || !this.player.alive) return;
@@ -408,6 +471,18 @@ export class MovementTester {
       return;
     }
 
+    if (path.length <= 1) {
+      this.player.destination = target;
+      this.player.path = path;
+      this.player.moving = false;
+      this.player.isAnimating = false;
+      this.player.pathHasHazard = false;
+      this.updateClopState();
+      this.emit('path:updated', { hasPath: false, path });
+      this.emitPlayerState();
+      return;
+    }
+
     this.player.destination = target;
     this.player.path = path;
     this.player.segmentIndex = 0;
@@ -416,6 +491,8 @@ export class MovementTester {
     this.player.moving = true;
     this.player.isAnimating = false;
     this.player.pendingStep = !this.player.stepMode;
+    this.player.pathHasHazard = this.pathContainsHazard(path, 1);
+    this.updateClopState();
     this.emit('path:updated', { hasPath: true, path });
     this.emitPlayerState();
   }
@@ -441,9 +518,12 @@ export class MovementTester {
       const currentCoord = this.fromKey(current);
       for (const neighbor of this.getNeighbors(currentCoord)) {
         const neighborKey = this.key(neighbor);
-        if (this.isBlocked(neighbor)) continue;
+        if (this.isBlocked(neighbor) || this.isHole(neighbor)) continue;
 
-        const tentativeG = (gScore.get(current) ?? Infinity) + this.getStepCost(neighbor);
+        const cost = this.getTraversalCost(neighbor);
+        if (!Number.isFinite(cost)) continue;
+
+        const tentativeG = (gScore.get(current) ?? Infinity) + cost;
         if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
           cameFrom.set(neighborKey, current);
           gScore.set(neighborKey, tentativeG);
@@ -462,15 +542,17 @@ export class MovementTester {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
   }
 
-  private getStepCost(coord: GridCoord): number {
+  private getTraversalCost(coord: GridCoord): number {
     const kind = this.getTileBehavior(coord).type;
     if (kind === 'slow') return 2.5;
+    if (kind === 'hazard-burn') return this.hazardPenalty;
     return 1;
   }
 
   private getStepDuration(coord: GridCoord): number {
-    const cost = this.getStepCost(coord);
-    return this.baseStepDuration * cost;
+    const kind = this.getTileBehavior(coord).type;
+    if (kind === 'slow') return this.baseStepDuration * 2.5;
+    return this.baseStepDuration;
   }
 
   private reconstructPath(cameFrom: Map<string, string | null>, current: string): GridCoord[] {
@@ -498,10 +580,18 @@ export class MovementTester {
     return behavior.type === 'blocker' || (behavior.type === 'door' && !behavior.open);
   }
 
+  private isHole(coord: GridCoord): boolean {
+    return this.getTileBehavior(coord).type === 'hole';
+  }
+
   private stopMovement(): void {
     this.player.moving = false;
     this.player.isAnimating = false;
+    this.player.path = [this.roundCoord(this.player.position)];
+    this.player.pathHasHazard = false;
+    this.updateClopState();
     this.emit('path:updated', { hasPath: false, path: this.player.path });
+    this.emitPlayerState();
   }
 
   private roundCoord(coord: GridCoord): GridCoord {
@@ -523,6 +613,12 @@ export class MovementTester {
   private update(dt: number): void {
     if (!this.player.alive) return;
 
+    if (!this.player.destination && this.exitTile) {
+      this.movePlayerTo(this.exitTile);
+    }
+
+    if (this.isPaused) return;
+
     if (this.shouldStartNextSegment()) {
       this.beginSegment();
     }
@@ -539,7 +635,8 @@ export class MovementTester {
       return;
     }
 
-    this.player.segmentProgress += dt / this.player.currentStepDuration;
+    const scaledDt = dt * this.speedMultiplier;
+    this.player.segmentProgress += scaledDt / this.player.currentStepDuration;
 
     if (this.player.segmentProgress >= 1) {
       this.player.position = { x: next.x, y: next.y };
@@ -567,6 +664,7 @@ export class MovementTester {
   private shouldStartNextSegment(): boolean {
     if (!this.player.moving || this.player.isAnimating) return false;
     if (this.player.segmentIndex >= this.player.path.length - 1) return false;
+    if (this.isPaused) return false;
     if (this.player.stepMode && !this.player.pendingStep) return false;
     return true;
   }
@@ -590,6 +688,8 @@ export class MovementTester {
       this.player.alive = false;
       this.player.moving = false;
       this.player.destination = null;
+      this.player.pathHasHazard = false;
+      this.updateClopState();
       this.emit('path:updated', { hasPath: false, path: [coord] });
       this.emitPlayerState();
       return;
@@ -603,6 +703,9 @@ export class MovementTester {
     if (behavior.type === 'exit') {
       this.player.reachedExit = true;
       this.player.moving = false;
+      this.player.pathHasHazard = false;
+      this.isPaused = true;
+      this.updateClopState();
       this.emit('path:updated', { hasPath: false, path: [coord] });
       this.emitPlayerState();
       return;
@@ -621,6 +724,18 @@ export class MovementTester {
       return;
     }
 
+    if (
+      this.player.destination &&
+      this.sameCoord(coord, this.player.destination) &&
+      this.exitTile &&
+      !this.sameCoord(coord, this.exitTile)
+    ) {
+      this.movePlayerTo(this.exitTile);
+      return;
+    }
+
+    this.player.pathHasHazard = this.pathContainsHazard(this.player.path, this.player.segmentIndex + 1);
+    this.updateClopState();
     this.emitPlayerState();
   }
 
@@ -644,7 +759,10 @@ export class MovementTester {
     this.player.moving = true;
     this.player.isAnimating = false;
     this.player.pendingStep = true; // Forced movement ignores step gating
+    this.player.pathHasHazard = this.pathContainsHazard(this.player.path, 1);
+    this.updateClopState();
     this.emit('path:updated', { hasPath: true, path: this.player.path });
+    this.emitPlayerState();
   }
 
   private rebuildPathToDestination(): void {
@@ -663,8 +781,21 @@ export class MovementTester {
     this.player.moving = true;
     this.player.isAnimating = false;
     this.player.pendingStep = !this.player.stepMode;
+    this.player.pathHasHazard = this.pathContainsHazard(path, 1);
+    this.updateClopState();
     this.emit('path:updated', { hasPath: true, path });
     this.emitPlayerState();
+  }
+
+  private updateClopState(): void {
+    if (!this.player.alive) return;
+    if (this.player.hp < this.player.maxHp) {
+      this.player.state = 'hurt';
+    } else if (!this.player.destination || this.player.pathHasHazard || (!this.player.moving && this.player.path.length <= 1)) {
+      this.player.state = 'scared';
+    } else {
+      this.player.state = 'normal';
+    }
   }
 
   private applyDamage(amount: number): void {
@@ -674,8 +805,10 @@ export class MovementTester {
       this.player.alive = false;
       this.player.moving = false;
       this.player.destination = null;
+      this.player.pathHasHazard = false;
       this.emit('path:updated', { hasPath: false, path: [this.roundCoord(this.player.position)] });
     }
+    this.updateClopState();
     this.emitPlayerState();
   }
 
@@ -748,8 +881,12 @@ export class MovementTester {
 
   private renderPlayer(ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number): void {
     const pos = gridToScreen(this.player.position.x, this.player.position.y, offsetX, offsetY);
-    const isHurt = performance.now() - this.player.lastDamageAt < 400;
-    ctx.fillStyle = isHurt ? PLAYER_HURT_COLOR : PLAYER_COLOR;
+    const isHurtFlash = performance.now() - this.player.lastDamageAt < 400;
+    const baseColor =
+      this.player.state === 'hurt' ? PLAYER_HURT_COLOR :
+      this.player.state === 'scared' ? PLAYER_SCARED_COLOR :
+      PLAYER_COLOR;
+    ctx.fillStyle = isHurtFlash ? PLAYER_HURT_COLOR : baseColor;
     ctx.beginPath();
     ctx.arc(pos.x, pos.y + ISO_TILE_HEIGHT / 2, ISO_TILE_WIDTH / 4, 0, Math.PI * 2);
     ctx.fill();
@@ -920,6 +1057,16 @@ export class MovementTester {
     return null;
   }
 
+  private findExitTile(): GridCoord | null {
+    let exit: GridCoord | null = null;
+    this.level.forEachTileBehavior((placement: TileBehaviorPlacement) => {
+      if (placement.type === 'exit' && !exit) {
+        exit = placement.position;
+      }
+    });
+    return exit;
+  }
+
   private findSpawnPoint(): GridCoord | null {
     let spawn: GridCoord | null = null;
     this.level.forEachTileBehavior((placement: TileBehaviorPlacement) => {
@@ -928,6 +1075,10 @@ export class MovementTester {
       }
     });
     return spawn;
+  }
+
+  private pathContainsHazard(path: GridCoord[], fromIndex = 0): boolean {
+    return path.slice(fromIndex).some((coord) => this.getTileBehavior(coord).type === 'hazard-burn');
   }
 
   private sameCoord(a: GridCoord | null, b: GridCoord | null): boolean {
