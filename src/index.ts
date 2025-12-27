@@ -18,6 +18,7 @@ import { MovementTester } from './movement/MovementTester';
 import { MovementControls } from './ui/MovementControls';
 import { ClopPersonalityTester } from './clops/ClopPersonalityTester';
 import { ClopPersonalityControls } from './ui/ClopPersonalityControls';
+import { PixelAssetGenerator } from './ui/PixelAssetGenerator';
 
 // Global reference to editor for debugging
 declare global {
@@ -93,6 +94,10 @@ async function init(): Promise<void> {
       }
     );
     const clopControls = new ClopPersonalityControls('clop-controls', clopTester, editor);
+    new PixelAssetGenerator(
+      'pixel-generator-controls',
+      'pixel-generator-output'
+    );
 
     // Select first tile by default
     tilePalette.selectTile(0);
@@ -132,23 +137,40 @@ function setupCanvasToggle(): void {
   const editorCanvas = document.getElementById('editor-canvas');
   const movementCanvas = document.getElementById('movement-canvas');
   const clopCanvas = document.getElementById('clop-canvas');
+  const pixelView = document.getElementById('pixel-generator-view');
   const editorPane = document.getElementById('editor-pane');
   const movementPane = document.getElementById('movement-pane');
   const clopPane = document.getElementById('clop-pane');
+  const pixelPane = document.getElementById('pixel-pane');
 
-  if (!toggle || !editorCanvas || !movementCanvas || !clopCanvas || !editorPane || !movementPane || !clopPane) return;
+  if (
+    !toggle ||
+    !editorCanvas ||
+    !movementCanvas ||
+    !clopCanvas ||
+    !pixelView ||
+    !editorPane ||
+    !movementPane ||
+    !clopPane ||
+    !pixelPane
+  ) {
+    return;
+  }
 
-  const setMode = (mode: 'editor' | 'movement' | 'clop'): void => {
+  const setMode = (mode: 'editor' | 'movement' | 'clop' | 'pixel'): void => {
     const isEditor = mode === 'editor';
     const isMovement = mode === 'movement';
     const isClop = mode === 'clop';
+    const isPixel = mode === 'pixel';
 
     editorCanvas.classList.toggle('inactive', !isEditor);
     movementCanvas.classList.toggle('inactive', !isMovement);
     clopCanvas.classList.toggle('inactive', !isClop);
+    pixelView.classList.toggle('inactive', !isPixel);
     editorPane.classList.toggle('active', isEditor);
     movementPane.classList.toggle('active', isMovement);
     clopPane.classList.toggle('active', isClop);
+    pixelPane.classList.toggle('active', isPixel);
 
     toggle.querySelectorAll('button[data-canvas]').forEach((button) => {
       const buttonMode = (button as HTMLButtonElement).dataset.canvas;
@@ -156,7 +178,13 @@ function setupCanvasToggle(): void {
     });
 
     if (sidebarTitle) {
-      sidebarTitle.textContent = isEditor ? 'Map Editor' : isMovement ? 'Movement Tester' : 'Clop Personalities';
+      sidebarTitle.textContent = isEditor
+        ? 'Map Editor'
+        : isMovement
+          ? 'Movement Tester'
+          : isClop
+            ? 'Clop Personalities'
+            : 'Pixel Asset Generator';
     }
   };
 
@@ -166,9 +194,13 @@ function setupCanvasToggle(): void {
     if (!btn) return;
 
     const mode =
-      btn.dataset.canvas === 'movement' ? 'movement' :
-      btn.dataset.canvas === 'clop' ? 'clop' :
-      'editor';
+      btn.dataset.canvas === 'movement'
+        ? 'movement'
+        : btn.dataset.canvas === 'clop'
+          ? 'clop'
+          : btn.dataset.canvas === 'pixel'
+            ? 'pixel'
+            : 'editor';
     setMode(mode);
   });
 
