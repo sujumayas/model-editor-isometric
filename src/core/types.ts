@@ -41,6 +41,35 @@ export interface TileData {
   readonly flipY?: boolean;
 }
 
+/** Cardinal direction helper */
+export type CardinalDirection = 'north' | 'east' | 'south' | 'west';
+
+/** Logical tile behavior used by movement tools */
+export type TileBehaviorType =
+  | 'floor'
+  | 'blocker'
+  | 'slow'
+  | 'hole'
+  | 'conveyor'
+  | 'hazard-burn'
+  | 'door'
+  | 'exit'
+  | 'spawn';
+
+/** Tile behavior metadata stored alongside the map */
+export interface TileBehavior {
+  readonly type: TileBehaviorType;
+  readonly direction?: CardinalDirection;
+  readonly doorId?: string;
+  readonly open?: boolean;
+  readonly damage?: number;
+}
+
+/** Serialized tile behavior placement */
+export interface TileBehaviorPlacement extends TileBehavior {
+  readonly position: GridCoord;
+}
+
 /** UV coordinates for extracting a tile from the spritesheet */
 export interface TileUV {
   readonly x: number;
@@ -111,6 +140,7 @@ export interface LevelData {
   readonly metadata: LevelMetadata;
   readonly grid: GridConfig;
   readonly layers: LayerData[];
+  readonly tileBehaviors?: TileBehaviorPlacement[];
 }
 
 // ============================================================================

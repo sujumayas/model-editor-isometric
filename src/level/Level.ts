@@ -9,6 +9,11 @@ import {
   GridCoord,
   TileData,
   LayerData,
+  TileBehavior,
+  TileBehaviorPlacement,
+  PositionKey,
+  toPositionKey,
+  fromPositionKey,
 } from '../core/types';
 import { GRID_WIDTH, GRID_HEIGHT, TILE_WIDTH, TILE_HEIGHT, DEFAULT_LAYERS } from '../core/constants';
 import { Layer } from './Layer';
@@ -21,6 +26,7 @@ export class Level {
   readonly gridConfig: GridConfig;
   private layers: Layer[] = [];
   private layerMap = new Map<string, Layer>();
+  private tileBehaviors = new Map<PositionKey, TileBehavior>();
 
   constructor(
     metadata: Partial<LevelMetadata> = {},
@@ -87,6 +93,51 @@ export class Level {
    */
   getLayerByIndex(index: number): Layer | undefined {
     return this.layers[index];
+  }
+
+  /**
+   * Get a tile behavior at the given coordinate
+   */
+  getTileBehavior(coord: GridCoord): TileBehavior | null {
+    const key = toPositionKey(coord);
+    return this.tileBehaviors.get(key) ?? null;
+  }
+
+  /**
+   * Set or clear a tile behavior
+   */
+  setTileBehavior(coord: GridCoord, behavior: TileBehavior | null): void {
+    const key = toPositionKey(coord);
+    if (!behavior || behavior.type === 'floor') {
+      this.tileBehaviors.delete(key);
+      return;
+    }
+    this.tileBehaviors.set(key, { ...behavior });
+  }
+
+  /**
+   * Remove all tile behaviors
+   */
+  clearTileBehaviors(): void {
+    this.tileBehaviors.clear();
+  }
+
+  /**
+   * Iterate over all tile behaviors
+   */
+  forEachTileBehavior(callback: (behavior: TileBehaviorPlacement) => void): void {
+    this.tileBehaviors.forEach((behavior, key) => {
+      callback({ position: fromPositionKey(key), ...behavior });
+    });
+  }
+
+  /**
+   * Get all tile behaviors as an array
+   */
+  getTileBehaviors(): TileBehaviorPlacement[] {
+    const result: TileBehaviorPlacement[] = [];
+    this.forEachTileBehavior((behavior) => result.push(behavior));
+    return result;
   }
 
   /**
@@ -196,6 +247,7 @@ export class Level {
       metadata: { ...this.metadata },
       grid: { ...this.gridConfig },
       layers: this.layers.map((layer) => layer.toData()),
+      tileBehaviors: this.getTileBehaviors(),
     };
   }
 
@@ -208,6 +260,12 @@ export class Level {
     for (const layerData of data.layers) {
       const layer = Layer.fromData(layerData);
       level.addLayer(layer);
+    }
+
+    if (data.tileBehaviors) {
+      for (const placement of data.tileBehaviors) {
+        level.setTileBehavior(placement.position, placement);
+      }
     }
 
     return level;

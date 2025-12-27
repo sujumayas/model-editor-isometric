@@ -4,6 +4,18 @@
 
 import { MovementTester, TileKind, ClickMode } from '../movement/MovementTester';
 import { Editor } from '../editor/Editor';
+import { CardinalDirection, GridCoord, TileBehavior } from '../core/types';
+import { TEST_SCENARIOS } from '../movement/testMaps';
+
+interface PlayerUIState {
+  hp: number;
+  maxHp: number;
+  alive: boolean;
+  reachedExit: boolean;
+  stepMode: boolean;
+  destination: GridCoord | null;
+  spawn: GridCoord | null;
+}
 
 export class MovementControls {
   private container: HTMLElement;
@@ -13,9 +25,32 @@ export class MovementControls {
   private fileInput: HTMLInputElement;
   private modeButtons = new Map<ClickMode, HTMLButtonElement>();
   private kindButtons = new Map<TileKind, HTMLButtonElement>();
+  private scenarioButtons = new Map<string, HTMLButtonElement>();
   private selectionLabel: HTMLElement;
   private kindLabel: HTMLElement;
   private pathLabel: HTMLElement;
+  private hpLabel: HTMLElement;
+  private stepLabel: HTMLElement;
+  private statusLabel: HTMLElement;
+  private stepToggleBtn: HTMLButtonElement;
+  private advanceBtn: HTMLButtonElement;
+  private resetBtn: HTMLButtonElement;
+
+  private directionSelect: HTMLSelectElement;
+  private doorIdInput: HTMLInputElement;
+  private doorToggleBtn: HTMLButtonElement;
+  private hazardDamageInput: HTMLInputElement;
+  private propertyRows: Record<'direction' | 'doorId' | 'doorState' | 'hazard', HTMLElement> = {
+    direction: document.createElement('div'),
+    doorId: document.createElement('div'),
+    doorState: document.createElement('div'),
+    hazard: document.createElement('div'),
+  };
+
+  private selectedCoord: GridCoord | null = null;
+  private selectionBehavior: TileBehavior = { type: 'floor' };
+  private playerState: PlayerUIState | null = null;
+  private hasPath = false;
 
   constructor(containerId: string, tester: MovementTester, editor: Editor) {
     const container = document.getElementById(containerId);
@@ -35,6 +70,18 @@ export class MovementControls {
     this.selectionLabel = document.createElement('div');
     this.kindLabel = document.createElement('div');
     this.pathLabel = document.createElement('div');
+    this.hpLabel = document.createElement('div');
+    this.stepLabel = document.createElement('div');
+    this.statusLabel = document.createElement('div');
+
+    this.stepToggleBtn = document.createElement('button');
+    this.advanceBtn = document.createElement('button');
+    this.resetBtn = document.createElement('button');
+
+    this.directionSelect = document.createElement('select');
+    this.doorIdInput = document.createElement('input');
+    this.doorToggleBtn = document.createElement('button');
+    this.hazardDamageInput = document.createElement('input');
 
     this.render();
     this.setupListeners();
@@ -45,8 +92,11 @@ export class MovementControls {
     this.container.appendChild(this.fileInput);
 
     this.container.appendChild(this.renderLoadSection());
+    this.container.appendChild(this.renderScenarioSection());
+    this.container.appendChild(this.renderMovementSection());
     this.container.appendChild(this.renderModeSection());
     this.container.appendChild(this.renderKindSection());
+    this.container.appendChild(this.renderPropertiesSection());
     this.container.appendChild(this.renderLegendSection());
     this.container.appendChild(this.renderStatusSection());
   }
@@ -79,6 +129,75 @@ export class MovementControls {
     return group;
   }
 
+  private renderScenarioSection(): HTMLElement {
+    const group = document.createElement('div');
+    group.className = 'control-group';
+
+    const label = document.createElement('div');
+    label.className = 'control-label';
+    label.textContent = 'Phase 1 Test Maps';
+
+    const buttons = document.createElement('div');
+    buttons.className = 'button-group';
+
+    TEST_SCENARIOS.forEach((scenario) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tool-btn small';
+      btn.textContent = scenario.name;
+      btn.title = scenario.description;
+      btn.addEventListener('click', () => {
+        const level = scenario.build();
+        this.tester.setLevel(level);
+      });
+      this.scenarioButtons.set(scenario.id, btn);
+      buttons.appendChild(btn);
+    });
+
+    group.appendChild(label);
+    group.appendChild(buttons);
+    return group;
+  }
+
+  private renderMovementSection(): HTMLElement {
+    const group = document.createElement('div');
+    group.className = 'control-group';
+
+    const label = document.createElement('div');
+    label.className = 'control-label';
+    label.textContent = 'Simulation';
+
+    const buttons = document.createElement('div');
+    buttons.className = 'button-group';
+
+    this.stepToggleBtn.type = 'button';
+    this.stepToggleBtn.className = 'tool-btn small';
+    this.stepToggleBtn.textContent = 'Step-by-step: Off';
+    this.stepToggleBtn.addEventListener('click', () => {
+      const next = !(this.playerState?.stepMode ?? false);
+      this.tester.setStepMode(next);
+      this.updateStepToggle(next);
+    });
+
+    this.advanceBtn.type = 'button';
+    this.advanceBtn.className = 'tool-btn small';
+    this.advanceBtn.textContent = 'Advance Turn';
+    this.advanceBtn.addEventListener('click', () => this.tester.advanceTurn());
+
+    this.resetBtn.type = 'button';
+    this.resetBtn.className = 'tool-btn small';
+    this.resetBtn.textContent = 'Reset to Spawn';
+    this.resetBtn.addEventListener('click', () => this.tester.resetPlayer());
+
+    buttons.appendChild(this.stepToggleBtn);
+    buttons.appendChild(this.advanceBtn);
+    buttons.appendChild(this.resetBtn);
+
+    group.appendChild(label);
+    group.appendChild(buttons);
+    return group;
+  }
+
   private renderModeSection(): HTMLElement {
     const group = document.createElement('div');
     group.className = 'control-group';
@@ -90,7 +209,7 @@ export class MovementControls {
     const buttons = document.createElement('div');
     buttons.className = 'button-group';
 
-    this.addModeButton(buttons, 'move', 'Move Player');
+    this.addModeButton(buttons, 'move', 'Move Token');
     this.addModeButton(buttons, 'edit', 'Select Tile');
 
     group.appendChild(label);
@@ -126,6 +245,12 @@ export class MovementControls {
     this.addKindButton(buttons, 'floor', 'Floor');
     this.addKindButton(buttons, 'blocker', 'Blocker');
     this.addKindButton(buttons, 'slow', 'Slow');
+    this.addKindButton(buttons, 'hole', 'Hole');
+    this.addKindButton(buttons, 'conveyor', 'Conveyor');
+    this.addKindButton(buttons, 'hazard-burn', 'Hazard (Burn)');
+    this.addKindButton(buttons, 'door', 'Door');
+    this.addKindButton(buttons, 'exit', 'Exit');
+    this.addKindButton(buttons, 'spawn', 'Spawn');
 
     group.appendChild(label);
     group.appendChild(buttons);
@@ -146,6 +271,93 @@ export class MovementControls {
     container.appendChild(btn);
   }
 
+  private renderPropertiesSection(): HTMLElement {
+    const group = document.createElement('div');
+    group.className = 'control-group';
+
+    const label = document.createElement('div');
+    label.className = 'control-label';
+    label.textContent = 'Tile Properties';
+
+    // Conveyor direction
+    this.propertyRows.direction.className = 'control-row';
+    const dirLabel = document.createElement('span');
+    dirLabel.className = 'control-meta';
+    dirLabel.textContent = 'Conveyor Direction';
+    ['north', 'east', 'south', 'west'].forEach((dir) => {
+      const option = document.createElement('option');
+      option.value = dir;
+      option.textContent = dir;
+      this.directionSelect.appendChild(option);
+    });
+    this.directionSelect.addEventListener('change', () => {
+      const direction = this.directionSelect.value as CardinalDirection;
+      this.tester.setDefaultConveyorDirection(direction);
+      if (this.selectionBehavior.type === 'conveyor') {
+        this.tester.updateSelectedBehavior({ direction });
+      }
+    });
+    this.propertyRows.direction.appendChild(dirLabel);
+    this.propertyRows.direction.appendChild(this.directionSelect);
+
+    // Door ID
+    this.propertyRows.doorId.className = 'control-row';
+    const doorLabel = document.createElement('span');
+    doorLabel.className = 'control-meta';
+    doorLabel.textContent = 'Door Link ID';
+    this.doorIdInput.type = 'text';
+    this.doorIdInput.placeholder = 'e.g., A1';
+    this.doorIdInput.addEventListener('input', () => {
+      if (this.selectionBehavior.type === 'door') {
+        this.tester.updateSelectedBehavior({ doorId: this.doorIdInput.value });
+      }
+    });
+    this.propertyRows.doorId.appendChild(doorLabel);
+    this.propertyRows.doorId.appendChild(this.doorIdInput);
+
+    // Door toggle
+    this.propertyRows.doorState.className = 'control-row';
+    const doorStateLabel = document.createElement('span');
+    doorStateLabel.className = 'control-meta';
+    doorStateLabel.textContent = 'Door State';
+    this.doorToggleBtn.type = 'button';
+    this.doorToggleBtn.className = 'tool-btn small';
+    this.doorToggleBtn.textContent = 'Toggle Door';
+    this.doorToggleBtn.addEventListener('click', () => {
+      if (this.selectedCoord) {
+        this.tester.toggleDoorState(this.selectedCoord);
+      }
+    });
+    this.propertyRows.doorState.appendChild(doorStateLabel);
+    this.propertyRows.doorState.appendChild(this.doorToggleBtn);
+
+    // Hazard damage
+    this.propertyRows.hazard.className = 'control-row';
+    const hazardLabel = document.createElement('span');
+    hazardLabel.className = 'control-meta';
+    hazardLabel.textContent = 'Hazard Damage';
+    this.hazardDamageInput.type = 'number';
+    this.hazardDamageInput.min = '1';
+    this.hazardDamageInput.value = '1';
+    this.hazardDamageInput.addEventListener('change', () => {
+      const damage = parseInt(this.hazardDamageInput.value, 10);
+      this.tester.setDefaultHazardDamage(damage);
+      if (this.selectionBehavior.type === 'hazard-burn') {
+        this.tester.updateSelectedBehavior({ damage: damage || 1 });
+      }
+    });
+    this.propertyRows.hazard.appendChild(hazardLabel);
+    this.propertyRows.hazard.appendChild(this.hazardDamageInput);
+
+    group.appendChild(label);
+    group.appendChild(this.propertyRows.direction);
+    group.appendChild(this.propertyRows.doorId);
+    group.appendChild(this.propertyRows.doorState);
+    group.appendChild(this.propertyRows.hazard);
+    this.updatePropertyVisibility(this.selectionBehavior);
+    return group;
+  }
+
   private renderLegendSection(): HTMLElement {
     const group = document.createElement('div');
     group.className = 'control-group';
@@ -160,6 +372,12 @@ export class MovementControls {
     grid.appendChild(this.createLegendRow('Floor', '#4a9eff'));
     grid.appendChild(this.createLegendRow('Blocker', '#ff4a4a'));
     grid.appendChild(this.createLegendRow('Slow', '#ffc75e'));
+    grid.appendChild(this.createLegendRow('Hole', '#303040'));
+    grid.appendChild(this.createLegendRow('Conveyor', '#87c4ff'));
+    grid.appendChild(this.createLegendRow('Hazard (Burn)', '#ff8451'));
+    grid.appendChild(this.createLegendRow('Door', '#9c84ff'));
+    grid.appendChild(this.createLegendRow('Exit', '#4affc6'));
+    grid.appendChild(this.createLegendRow('Spawn', '#8aff4a'));
 
     group.appendChild(label);
     group.appendChild(grid);
@@ -188,19 +406,34 @@ export class MovementControls {
 
     const label = document.createElement('div');
     label.className = 'control-label';
-    label.textContent = 'Selection';
+    label.textContent = 'Status';
 
     this.selectionLabel.className = 'control-meta';
     this.kindLabel.className = 'control-meta';
     this.pathLabel.className = 'control-meta';
+    this.hpLabel.className = 'control-meta';
+    this.stepLabel.className = 'control-meta';
+    this.statusLabel.className = 'control-meta';
 
     group.appendChild(label);
     group.appendChild(this.selectionLabel);
     group.appendChild(this.kindLabel);
     group.appendChild(this.pathLabel);
+    group.appendChild(this.hpLabel);
+    group.appendChild(this.stepLabel);
+    group.appendChild(this.statusLabel);
 
-    this.updateSelectionStatus(null, 'floor');
-    this.updatePathStatus(false);
+    this.updateSelectionStatus(null, { type: 'floor' });
+    this.updatePathStatus(false, []);
+    this.updatePlayerStatus({
+      hp: 3,
+      maxHp: 3,
+      alive: true,
+      reachedExit: false,
+      stepMode: false,
+      destination: null,
+      spawn: null,
+    });
     return group;
   }
 
@@ -215,9 +448,12 @@ export class MovementControls {
       }
     });
 
-    this.tester.on('selection:changed', ({ coord, kind }) => {
-      this.updateSelectionStatus(coord, kind);
-      this.updateKindButtons(kind);
+    this.tester.on('selection:changed', ({ coord, behavior }) => {
+      this.selectedCoord = coord;
+      this.selectionBehavior = behavior;
+      this.updateSelectionStatus(coord, behavior);
+      this.updateKindButtons(behavior.type);
+      this.syncProperties(behavior);
     });
 
     this.tester.on('mode:changed', ({ mode }) => {
@@ -225,26 +461,35 @@ export class MovementControls {
     });
 
     this.tester.on('level:changed', () => {
-      this.updateSelectionStatus(null, 'floor');
-      this.updatePathStatus(false);
+      this.updateSelectionStatus(null, { type: 'floor' });
+      this.updatePathStatus(false, []);
     });
 
-    this.tester.on('path:updated', ({ hasPath }) => {
-      this.updatePathStatus(hasPath);
+    this.tester.on('path:updated', ({ hasPath, path }) => {
+      this.hasPath = hasPath;
+      this.updatePathStatus(hasPath, path);
+    });
+
+    this.tester.on('player:updated', (state) => {
+      this.playerState = state;
+      this.updatePlayerStatus(state);
+      this.updateStepToggle(state.stepMode);
+      this.refreshButtonStates();
     });
 
     // Initialize UI state
     this.updateModeButtons('move');
     this.updateKindButtons('floor');
+    this.refreshButtonStates();
   }
 
-  private updateSelectionStatus(coord: { x: number; y: number } | null, kind: TileKind): void {
+  private updateSelectionStatus(coord: GridCoord | null, behavior: TileBehavior): void {
     if (coord) {
       this.selectionLabel.textContent = `Tile: ${coord.x}, ${coord.y}`;
     } else {
       this.selectionLabel.textContent = 'Tile: --';
     }
-    this.kindLabel.textContent = `Kind: ${kind}`;
+    this.kindLabel.textContent = `Kind: ${behavior.type}`;
   }
 
   private updateModeButtons(active: ClickMode): void {
@@ -263,7 +508,61 @@ export class MovementControls {
     });
   }
 
-  private updatePathStatus(hasPath: boolean): void {
-    this.pathLabel.textContent = hasPath ? 'Path: ready' : 'Path: none';
+  private updatePathStatus(hasPath: boolean, path: GridCoord[]): void {
+    if (hasPath && path.length > 1) {
+      this.pathLabel.textContent = `Path: ${path.length - 1} steps`;
+    } else {
+      this.pathLabel.textContent = 'Path: none';
+    }
+    this.refreshButtonStates();
+  }
+
+  private updatePlayerStatus(state: PlayerUIState): void {
+    this.hpLabel.textContent = `HP: ${state.hp}/${state.maxHp}`;
+    const spawnText = state.spawn ? `Spawn: ${state.spawn.x}, ${state.spawn.y}` : 'Spawn: --';
+    const destText = state.destination ? `Destination: ${state.destination.x}, ${state.destination.y}` : 'Destination: --';
+    this.stepLabel.textContent = `${spawnText} • ${destText}`;
+    if (!state.alive) {
+      this.statusLabel.textContent = 'Status: Down (reset to respawn)';
+    } else if (state.reachedExit) {
+      this.statusLabel.textContent = 'Status: Exit reached';
+    } else {
+      this.statusLabel.textContent = state.stepMode ? 'Status: Step-by-step' : 'Status: Auto movement';
+    }
+  }
+
+  private updateStepToggle(stepMode: boolean): void {
+    this.stepToggleBtn.textContent = stepMode ? 'Step-by-step: On' : 'Step-by-step: Off';
+    this.stepToggleBtn.classList.toggle('active', stepMode);
+  }
+
+  private syncProperties(behavior: TileBehavior): void {
+    if (behavior.type === 'conveyor' && behavior.direction) {
+      this.directionSelect.value = behavior.direction;
+    }
+
+    if (behavior.type === 'door') {
+      this.doorIdInput.value = behavior.doorId ?? '';
+      this.doorToggleBtn.textContent = behavior.open ? 'Close Door' : 'Open Door';
+    }
+
+    if (behavior.type === 'hazard-burn' && behavior.damage) {
+      this.hazardDamageInput.value = String(behavior.damage);
+    }
+
+    this.updatePropertyVisibility(behavior);
+  }
+
+  private updatePropertyVisibility(behavior: TileBehavior): void {
+    this.propertyRows.direction.style.display = behavior.type === 'conveyor' ? 'flex' : 'none';
+    this.propertyRows.doorId.style.display = behavior.type === 'door' ? 'flex' : 'none';
+    this.propertyRows.doorState.style.display = behavior.type === 'door' ? 'flex' : 'none';
+    this.propertyRows.hazard.style.display = behavior.type === 'hazard-burn' ? 'flex' : 'none';
+  }
+
+  private refreshButtonStates(): void {
+    const alive = this.playerState?.alive ?? true;
+    this.advanceBtn.disabled = !alive || !this.hasPath;
+    this.resetBtn.disabled = false;
   }
 }

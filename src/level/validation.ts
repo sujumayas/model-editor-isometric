@@ -3,7 +3,15 @@
  */
 
 import { z } from 'zod';
-import { LevelData, LayerData, TilePlacement, GridCoord, LevelMetadata, GridConfig } from '../core/types';
+import {
+  LevelData,
+  LayerData,
+  TilePlacement,
+  GridCoord,
+  LevelMetadata,
+  GridConfig,
+  TileBehaviorPlacement,
+} from '../core/types';
 
 // Grid coordinate schema
 const GridCoordSchema = z.object({
@@ -35,6 +43,26 @@ const GridConfigSchema = z.object({
   tileHeight: z.number().int().min(1),
 });
 
+// Tile behavior schema
+const TileBehaviorSchema: z.ZodType<TileBehaviorPlacement> = z.object({
+  position: GridCoordSchema,
+  type: z.enum([
+    'floor',
+    'blocker',
+    'slow',
+    'hole',
+    'conveyor',
+    'hazard-burn',
+    'door',
+    'exit',
+    'spawn',
+  ]),
+  direction: z.enum(['north', 'east', 'south', 'west']).optional(),
+  doorId: z.string().optional(),
+  open: z.boolean().optional(),
+  damage: z.number().int().min(0).optional(),
+});
+
 // Level metadata schema
 const LevelMetadataSchema = z.object({
   id: z.string(),
@@ -51,6 +79,7 @@ const LevelDataSchema = z.object({
   metadata: LevelMetadataSchema,
   grid: GridConfigSchema,
   layers: z.array(LayerDataSchema).min(1),
+  tileBehaviors: z.array(TileBehaviorSchema).optional(),
 });
 
 /**
@@ -107,4 +136,5 @@ export const schemas = {
   GridConfig: GridConfigSchema,
   LevelMetadata: LevelMetadataSchema,
   LevelData: LevelDataSchema,
+  TileBehavior: TileBehaviorSchema,
 };
