@@ -23,6 +23,7 @@ export interface PixelAssetResponse {
   prompt: string;
   model: string;
   requirements: PixelAssetRequirements;
+  notes?: string;
 }
 
 export async function generatePixelAsset(

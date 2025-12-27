@@ -316,8 +316,168 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 6px;
     }
+
+    textarea,
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      background: #0f0f23;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 8px;
+      color: #e6e8ff;
+      font-size: 13px;
+    }
+
+    textarea:focus,
+    input[type="text"]:focus,
+    input[type="number"]:focus {
+      outline: none;
+      border-color: #4a9eff;
+      box-shadow: 0 0 0 1px #4a9eff33;
+    }
+
+    .input-label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: #c5c8ff;
+      flex: 1;
+    }
+
+    .prompt-preview {
+      background: #0f0f23;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #e6e8ff;
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow: auto;
+    }
+
+    .pixel-req-list {
+      list-style: disc;
+      padding-left: 16px;
+      color: #c5c8ff;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+    }
+
+    .pixel-status {
+      margin-top: 6px;
+    }
+
+    .pixel-status.error {
+      color: #ff8f9f;
+    }
+
+    #pixel-generator-view {
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+    }
+
+    #pixel-generator-output {
+      width: 100%;
+    }
+
+    .pixel-output {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+    }
+
+    .pixel-output-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .pixel-output-header h3 {
+      margin-bottom: 4px;
+      font-size: 18px;
+    }
+
+    .pixel-output-header p {
+      color: #b0b5d9;
+      font-size: 13px;
+    }
+
+    .pixel-output-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pixel-output-meta span {
+      background: rgba(74, 158, 255, 0.14);
+      color: #c5dcff;
+      border: 1px solid #0f3460;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .pixel-output-content {
+      flex: 1;
+      display: flex;
+    }
+
+    .pixel-card {
+      display: flex;
+      flex-direction: row;
+      gap: 12px;
+      background: rgba(15, 15, 35, 0.7);
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      padding: 12px;
+      width: 100%;
+    }
+
+    .pixel-preview-frame {
+      flex: 1;
+      min-height: 200px;
+      border: 1px dashed #0f3460;
+      border-radius: 8px;
+      background: #0f0f23;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .pixel-preview-image {
+      max-width: 100%;
+      max-height: 100%;
+      image-rendering: pixelated;
+      display: none;
+    }
+
+    .pixel-card-body {
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .pixel-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: #e6e8ff;
+      line-height: 1.4;
+    }
   </style>
-  <script type="module" crossorigin src="/assets/index-BHXMUFCs.js"></script>
+  <script type="module" crossorigin src="/assets/index-CGWbH42x.js"></script>
 </head>
 <body>
   <div id="app">
@@ -359,6 +519,12 @@
           <div id="clop-controls"></div>
         </div>
       </div>
+      <div class="sidebar-pane" id="pixel-pane">
+        <div class="panel" id="pixel-panel">
+          <div class="panel-header">Pixel Asset Generator</div>
+          <div id="pixel-generator-controls"></div>
+        </div>
+      </div>
     </div>
     <div id="canvas-container">
       <div id="canvas-top-bar">
@@ -366,12 +532,16 @@
           <button class="tool-btn small active" data-canvas="editor">Editing</button>
           <button class="tool-btn small" data-canvas="movement">Movement Testing</button>
           <button class="tool-btn small" data-canvas="clop">Clop Personalities</button>
+          <button class="tool-btn small" data-canvas="pixel">Pixel Generator</button>
         </div>
       </div>
       <div id="canvas-stack">
         <canvas id="editor-canvas" class="canvas-layer"></canvas>
         <canvas id="movement-canvas" class="canvas-layer inactive"></canvas>
         <canvas id="clop-canvas" class="canvas-layer inactive"></canvas>
+        <div id="pixel-generator-view" class="canvas-layer inactive">
+          <div id="pixel-generator-output"></div>
+        </div>
       </div>
       <div id="status-bar">
         <span id="status-position">Position: --</span>
