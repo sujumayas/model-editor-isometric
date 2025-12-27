@@ -1,9 +1,19 @@
 /**
- * Movement testing view that reuses the isometric renderer and grid logic.
+ * Movement testing view with gameplay mechanics integration.
+ * Supports tile behaviors, player HP, step-by-step mode, and reset.
  */
 
 import { calculateCenterOffset, gridToScreen } from '../core/isometric';
-import { PositionKey, GridCoord, toPositionKey, fromPositionKey } from '../core/types';
+import {
+  PositionKey,
+  GridCoord,
+  toPositionKey,
+  fromPositionKey,
+  TileProperties,
+  GameplayTileType,
+  Direction,
+  DIRECTION_VECTORS,
+} from '../core/types';
 import { Canvas } from '../engine/Canvas';
 import { Camera } from '../engine/Camera';
 import { Renderer } from '../engine/Renderer';
@@ -11,8 +21,17 @@ import { TileRegistry } from '../assets/TileRegistry';
 import { Level } from '../level/Level';
 import { deserializeLevel, loadLevelFromFile, serializeLevel } from '../level/LevelSerializer';
 import { ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from '../core/constants';
+import {
+  getTileBehaviorRegistry,
+  TileBehaviorRegistry,
+  PlayerState,
+  GameState,
+  TileBehaviorContext,
+  createDefaultPlayerState,
+  createDefaultGameState,
+  PlayerStateType,
+} from '../gameplay';
 
-export type TileKind = 'floor' | 'blocker' | 'slow';
 export type ClickMode = 'move' | 'edit';
 
 export interface MovementTesterOptions {
@@ -22,38 +41,53 @@ export interface MovementTesterOptions {
 }
 
 export interface MovementTesterEventMap {
-  'selection:changed': { coord: GridCoord | null; kind: TileKind };
+  'selection:changed': { coord: GridCoord | null; properties: TileProperties };
   'mode:changed': { mode: ClickMode };
   'level:changed': { level: Level };
   'path:updated': { hasPath: boolean };
+  'player:hp:changed': { hp: number; maxHp: number; damage?: number };
+  'player:state:changed': { state: PlayerStateType };
+  'player:died': { cause: GameplayTileType };
+  'player:won': void;
+  'step:completed': { turnNumber: number };
+  'door:toggled': { doorId: string; isOpen: boolean };
+  'gamestate:changed': { gameState: GameState };
 }
 
 type MovementTesterEvent = keyof MovementTesterEventMap;
 type MovementTesterHandler<T extends MovementTesterEvent> = (payload: MovementTesterEventMap[T]) => void;
 type MovementListener = (payload: unknown) => void;
 
-const FLOOR_COLOR = 'rgba(74, 158, 255, 0.08)';
-const BLOCKER_COLOR = 'rgba(255, 74, 74, 0.45)';
-const SLOW_COLOR = 'rgba(255, 199, 94, 0.35)';
+// Tile overlay colors
+const OVERLAY_COLORS: Record<GameplayTileType, string> = {
+  floor: 'rgba(74, 158, 255, 0.08)',
+  blocker: 'rgba(255, 74, 74, 0.45)',
+  slow: 'rgba(255, 199, 94, 0.35)',
+  hole: 'rgba(0, 0, 0, 0.7)',
+  conveyor: 'rgba(100, 200, 255, 0.5)',
+  hazard: 'rgba(255, 100, 50, 0.6)',
+  door: 'rgba(139, 69, 19, 0.7)',
+  exit: 'rgba(100, 255, 100, 0.6)',
+  spawn: 'rgba(255, 255, 100, 0.5)',
+};
+
 const SELECTION_COLOR = 'rgba(74, 255, 158, 0.5)';
 const PATH_COLOR = 'rgba(74, 158, 255, 0.6)';
 const PLAYER_COLOR = 'rgba(74, 255, 158, 0.9)';
+const PLAYER_DEAD_COLOR = 'rgba(255, 74, 74, 0.9)';
+const PLAYER_WON_COLOR = 'rgba(255, 215, 0, 0.9)';
 
-interface PlayerState {
-  position: { x: number; y: number };
-  path: GridCoord[];
-  segmentIndex: number;
-  segmentProgress: number;
-  moving: boolean;
-}
+// Door colors
+const DOOR_OPEN_COLOR = 'rgba(139, 69, 19, 0.3)';
+const DOOR_CLOSED_COLOR = 'rgba(139, 69, 19, 0.7)';
 
 export class MovementTester {
   readonly canvas: Canvas;
   readonly camera: Camera;
   readonly renderer: Renderer;
   private tileRegistry: TileRegistry;
+  private behaviorRegistry: TileBehaviorRegistry;
   private level: Level;
-  private kinds = new Map<PositionKey, TileKind>();
   private selected: GridCoord | null = null;
   private hovered: GridCoord | null = null;
   private clickMode: ClickMode = 'move';
@@ -63,16 +97,16 @@ export class MovementTester {
   private lastTimestamp = 0;
   private isRunning = false;
 
-  private player: PlayerState = {
-    position: { x: 0, y: 0 },
-    path: [],
-    segmentIndex: 0,
-    segmentProgress: 0,
-    moving: false,
-  };
+  // Game state
+  private gameState: GameState;
+
+  // Damage flash effect
+  private damageFlashTimer = 0;
+  private readonly DAMAGE_FLASH_DURATION = 0.3;
 
   constructor(options: MovementTesterOptions) {
     this.tileRegistry = options.tileRegistry;
+    this.behaviorRegistry = getTileBehaviorRegistry();
 
     this.canvas = new Canvas({
       canvas: options.canvas,
@@ -84,6 +118,8 @@ export class MovementTester {
     this.renderer.setOptions({ showHover: false, showSelection: false });
 
     this.level = Level.createDefault('Movement Test');
+    this.gameState = createDefaultGameState();
+
     this.setupEventListeners();
     this.resetPlayerPosition();
     this.start();
@@ -109,13 +145,17 @@ export class MovementTester {
     return this.level;
   }
 
+  getGameState(): GameState {
+    return this.gameState;
+  }
+
   getSelectedCoord(): GridCoord | null {
     return this.selected;
   }
 
-  getTileKind(coord: GridCoord): TileKind {
-    const key = toPositionKey(coord);
-    return this.kinds.get(key) ?? 'floor';
+  getTileProperties(coord: GridCoord): TileProperties {
+    const props = this.level.getGameplayTile(coord);
+    return props ?? { type: 'floor' };
   }
 
   setClickMode(mode: ClickMode): void {
@@ -138,30 +178,100 @@ export class MovementTester {
 
   setLevel(level: Level): void {
     this.level = level;
-    this.kinds.clear();
     this.selected = null;
     this.hovered = null;
-    this.resetPlayerPosition();
-    this.emit('selection:changed', { coord: null, kind: 'floor' });
+    this.resetPlayer();
+    this.emit('selection:changed', { coord: null, properties: { type: 'floor' } });
     this.emit('level:changed', { level });
   }
 
-  setSelectedKind(kind: TileKind): void {
+  // Tile editing ------------------------------------------------------------
+  setSelectedProperties(properties: TileProperties): void {
     if (!this.selected) return;
-    this.setTileKind(this.selected, kind);
-    this.emit('selection:changed', { coord: this.selected, kind });
+    this.setTileProperties(this.selected, properties);
+    this.emit('selection:changed', { coord: this.selected, properties });
   }
 
-  setTileKind(coord: GridCoord, kind: TileKind): void {
+  setTileProperties(coord: GridCoord, properties: TileProperties): void {
     if (!this.level.isInBounds(coord)) return;
-    const key = toPositionKey(coord);
-    if (kind === 'floor') {
-      this.kinds.delete(key);
-    } else {
-      this.kinds.set(key, kind);
+    this.level.setGameplayTile(coord, properties);
+  }
+
+  // Step mode ---------------------------------------------------------------
+  isStepMode(): boolean {
+    return this.gameState.isStepMode;
+  }
+
+  setStepMode(enabled: boolean): void {
+    this.gameState.isStepMode = enabled;
+    if (!enabled) {
+      this.gameState.waitingForStep = false;
+    }
+    this.emit('gamestate:changed', { gameState: this.gameState });
+  }
+
+  advanceStep(): void {
+    if (this.gameState.isStepMode && this.gameState.waitingForStep) {
+      this.gameState.waitingForStep = false;
     }
   }
 
+  // Door control ------------------------------------------------------------
+  toggleDoor(doorId: string): void {
+    const isOpen = this.gameState.openDoors.has(doorId);
+    if (isOpen) {
+      this.gameState.openDoors.delete(doorId);
+    } else {
+      this.gameState.openDoors.add(doorId);
+    }
+    this.emit('door:toggled', { doorId, isOpen: !isOpen });
+    this.emit('gamestate:changed', { gameState: this.gameState });
+  }
+
+  isDoorOpen(doorId: string): boolean {
+    return this.gameState.openDoors.has(doorId);
+  }
+
+  getAllDoorIds(): string[] {
+    const doorIds = new Set<string>();
+    for (const { properties } of this.level.getAllGameplayTiles()) {
+      if (properties.type === 'door' && properties.linkedId) {
+        doorIds.add(properties.linkedId);
+      }
+    }
+    return Array.from(doorIds);
+  }
+
+  // Player control ----------------------------------------------------------
+  resetPlayer(): void {
+    const spawnTile = this.level.findSpawnTile();
+    const spawnPos = spawnTile ?? this.findFirstWalkable() ?? { x: 0, y: 0 };
+
+    this.gameState = createDefaultGameState(spawnPos);
+    this.damageFlashTimer = 0;
+
+    this.emit('player:hp:changed', { hp: this.gameState.player.hp, maxHp: this.gameState.player.maxHp });
+    this.emit('player:state:changed', { state: this.gameState.player.state });
+    this.emit('gamestate:changed', { gameState: this.gameState });
+  }
+
+  private resetPlayerPosition(): void {
+    this.resetPlayer();
+  }
+
+  getPlayerHP(): { hp: number; maxHp: number } {
+    return { hp: this.gameState.player.hp, maxHp: this.gameState.player.maxHp };
+  }
+
+  getPlayerState(): PlayerStateType {
+    return this.gameState.player.state;
+  }
+
+  getTurnNumber(): number {
+    return this.gameState.turnNumber;
+  }
+
+  // Animation control -------------------------------------------------------
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
@@ -213,7 +323,7 @@ export class MovementTester {
 
   private selectCoord(coord: GridCoord): void {
     this.selected = coord;
-    this.emit('selection:changed', { coord, kind: this.getTileKind(coord) });
+    this.emit('selection:changed', { coord, properties: this.getTileProperties(coord) });
   }
 
   private screenToGrid(e: MouseEvent): GridCoord | null {
@@ -227,34 +337,47 @@ export class MovementTester {
     return null;
   }
 
-  private resetPlayerPosition(): void {
-    const start = this.findFirstWalkable() ?? { x: 0, y: 0 };
-    this.player.position = start;
-    this.player.path = [];
-    this.player.segmentIndex = 0;
-    this.player.segmentProgress = 0;
-    this.player.moving = false;
-  }
-
   // Movement ----------------------------------------------------------------
   private movePlayerTo(target: GridCoord): void {
     if (!this.level.isInBounds(target)) return;
-    if (this.getTileKind(target) === 'blocker') return;
 
-    const start = { x: Math.round(this.player.position.x), y: Math.round(this.player.position.y) };
-    const path = this.findPath(start, target);
-    if (!path || path.length === 0) {
-      this.player.path = [];
-      this.player.moving = false;
+    const player = this.gameState.player;
+
+    // Cannot move if dead or won
+    if (player.state === 'dead' || player.state === 'won') return;
+
+    // Check if target is walkable
+    const targetProps = this.getTileProperties(target);
+    const targetBehavior = this.behaviorRegistry.get(targetProps.type);
+    const ctx = this.createBehaviorContext(target, targetProps);
+    if (!targetBehavior.isWalkable(ctx)) {
       this.emit('path:updated', { hasPath: false });
       return;
     }
 
-    this.player.path = path;
-    this.player.segmentIndex = 0;
-    this.player.segmentProgress = 0;
-    this.player.moving = true;
+    const start = { x: Math.round(player.position.x), y: Math.round(player.position.y) };
+    const path = this.findPath(start, target);
+    if (!path || path.length === 0) {
+      player.path = [];
+      this.emit('path:updated', { hasPath: false });
+      return;
+    }
+
+    player.path = path;
+    player.segmentIndex = 0;
+    player.segmentProgress = 0;
+    player.state = 'moving';
     this.emit('path:updated', { hasPath: true });
+    this.emit('player:state:changed', { state: 'moving' });
+  }
+
+  private createBehaviorContext(coord: GridCoord, props: TileProperties): TileBehaviorContext {
+    return {
+      player: this.gameState.player,
+      tileProperties: props,
+      coord,
+      gameState: this.gameState,
+    };
   }
 
   private findPath(start: GridCoord, goal: GridCoord): GridCoord[] | null {
@@ -278,9 +401,14 @@ export class MovementTester {
       const currentCoord = fromPositionKey(current);
       for (const neighbor of this.getNeighbors(currentCoord)) {
         const neighborKey = toPositionKey(neighbor);
-        if (this.getTileKind(neighbor) === 'blocker') continue;
+        const neighborProps = this.getTileProperties(neighbor);
+        const neighborBehavior = this.behaviorRegistry.get(neighborProps.type);
+        const ctx = this.createBehaviorContext(neighbor, neighborProps);
 
-        const tentativeG = (gScore.get(current) ?? Infinity) + this.getStepCost(neighbor);
+        if (!neighborBehavior.isWalkable(ctx)) continue;
+
+        const movementCost = neighborBehavior.getMovementCost(ctx);
+        const tentativeG = (gScore.get(current) ?? Infinity) + movementCost;
         if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
           cameFrom.set(neighborKey, current);
           gScore.set(neighborKey, tentativeG);
@@ -297,12 +425,6 @@ export class MovementTester {
 
   private heuristic(a: GridCoord, b: GridCoord): number {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-  }
-
-  private getStepCost(coord: GridCoord): number {
-    const kind = this.getTileKind(coord);
-    if (kind === 'slow') return 2.5;
-    return 1;
   }
 
   private reconstructPath(cameFrom: Map<PositionKey, PositionKey | null>, current: PositionKey): GridCoord[] {
@@ -338,38 +460,136 @@ export class MovementTester {
   }
 
   private update(dt: number): void {
-    if (!this.player.moving || this.player.path.length < 2) return;
+    // Update damage flash
+    if (this.damageFlashTimer > 0) {
+      this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
+    }
 
-    const currentIndex = this.player.segmentIndex;
+    const player = this.gameState.player;
+
+    // Cannot update if dead or won
+    if (player.state === 'dead' || player.state === 'won') return;
+
+    // Step mode: wait for user input
+    if (this.gameState.isStepMode && this.gameState.waitingForStep) return;
+
+    // Not moving
+    if (player.state !== 'moving' || player.path.length < 2) return;
+
+    const currentIndex = player.segmentIndex;
     const nextIndex = currentIndex + 1;
-    const current = this.player.path[currentIndex];
-    const next = this.player.path[nextIndex];
+    const current = player.path[currentIndex];
+    const next = player.path[nextIndex];
 
     if (!current || !next) {
-      this.player.moving = false;
+      player.state = 'idle';
+      this.emit('player:state:changed', { state: 'idle' });
       this.emit('path:updated', { hasPath: false });
       return;
     }
 
-    const stepDuration = 0.25 * this.getStepCost(next);
-    this.player.segmentProgress += dt / stepDuration;
+    // Calculate step duration based on tile cost
+    const nextProps = this.getTileProperties(next);
+    const nextBehavior = this.behaviorRegistry.get(nextProps.type);
+    const ctx = this.createBehaviorContext(next, nextProps);
+    const movementCost = nextBehavior.getMovementCost(ctx);
+    const stepDuration = 0.25 * movementCost;
 
-    if (this.player.segmentProgress >= 1) {
-      this.player.position = { x: next.x, y: next.y };
-      this.player.segmentIndex = nextIndex;
-      this.player.segmentProgress = 0;
+    player.segmentProgress += dt / stepDuration;
 
-      if (nextIndex >= this.player.path.length - 1) {
-        this.player.moving = false;
-        this.player.path = [next];
+    if (player.segmentProgress >= 1) {
+      // Arrived at next tile
+      player.position = { x: next.x, y: next.y };
+      player.visualPosition = { x: next.x, y: next.y };
+      player.segmentIndex = nextIndex;
+      player.segmentProgress = 0;
+
+      // Apply tile effect
+      this.applyTileEffect(next);
+
+      // Check if dead or won after effect (state may have changed)
+      if (this.gameState.player.state === 'dead' || this.gameState.player.state === 'won') {
+        this.gameState.player.path = [];
+        return;
+      }
+
+      // Handle forced movement (conveyor)
+      if (player.pendingForcedMove) {
+        const forcedTarget = player.pendingForcedMove;
+        player.pendingForcedMove = undefined;
+
+        // Check if forced target is valid
+        if (this.level.isInBounds(forcedTarget)) {
+          const forcedProps = this.getTileProperties(forcedTarget);
+          const forcedBehavior = this.behaviorRegistry.get(forcedProps.type);
+          const forcedCtx = this.createBehaviorContext(forcedTarget, forcedProps);
+
+          if (forcedBehavior.isWalkable(forcedCtx)) {
+            // Execute forced movement
+            player.path = [player.position, forcedTarget];
+            player.segmentIndex = 0;
+            player.segmentProgress = 0;
+            return;
+          }
+        }
+      }
+
+      // Check if reached end of path
+      if (nextIndex >= player.path.length - 1) {
+        player.state = 'idle';
+        player.path = [next];
+        this.emit('player:state:changed', { state: 'idle' });
         this.emit('path:updated', { hasPath: false });
+
+        // Step mode: wait for next input
+        if (this.gameState.isStepMode) {
+          this.gameState.turnNumber++;
+          this.gameState.waitingForStep = true;
+          this.emit('step:completed', { turnNumber: this.gameState.turnNumber });
+          this.emit('gamestate:changed', { gameState: this.gameState });
+        }
       }
     } else {
-      const t = this.player.segmentProgress;
-      this.player.position = {
+      // Interpolate position
+      const t = player.segmentProgress;
+      player.visualPosition = {
         x: current.x + (next.x - current.x) * t,
         y: current.y + (next.y - current.y) * t,
       };
+    }
+  }
+
+  private applyTileEffect(coord: GridCoord): void {
+    const props = this.getTileProperties(coord);
+    const behavior = this.behaviorRegistry.get(props.type);
+    const ctx = this.createBehaviorContext(coord, props);
+
+    const prevHp = this.gameState.player.hp;
+    const prevState = this.gameState.player.state;
+
+    // Apply behavior effect
+    this.gameState.player = behavior.onEnter(ctx);
+
+    // Check for HP change (damage)
+    if (this.gameState.player.hp < prevHp) {
+      const damage = prevHp - this.gameState.player.hp;
+      this.damageFlashTimer = this.DAMAGE_FLASH_DURATION;
+      this.emit('player:hp:changed', {
+        hp: this.gameState.player.hp,
+        maxHp: this.gameState.player.maxHp,
+        damage,
+      });
+    }
+
+    // Check for state change
+    if (this.gameState.player.state !== prevState) {
+      this.emit('player:state:changed', { state: this.gameState.player.state });
+
+      if (this.gameState.player.state === 'dead') {
+        this.emit('player:died', { cause: props.type });
+      } else if (this.gameState.player.state === 'won') {
+        this.emit('player:won', undefined);
+      }
     }
   }
 
@@ -388,23 +608,45 @@ export class MovementTester {
       this.level.gridHeight
     );
 
-    this.renderKindOverlays(ctx, centerOffset.x, centerOffset.y);
+    this.renderTileOverlays(ctx, centerOffset.x, centerOffset.y);
     this.renderSelection(ctx, centerOffset.x, centerOffset.y);
     this.renderPath(ctx, centerOffset.x, centerOffset.y);
     this.renderPlayer(ctx, centerOffset.x, centerOffset.y);
 
     ctx.restore();
+
+    // Render UI overlay (HP display)
+    this.renderHPDisplay();
   }
 
-  private renderKindOverlays(ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number): void {
+  private renderTileOverlays(ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number): void {
     for (let y = 0; y < this.level.gridHeight; y++) {
       for (let x = 0; x < this.level.gridWidth; x++) {
-        const kind = this.getTileKind({ x, y });
-        const color =
-          kind === 'blocker' ? BLOCKER_COLOR :
-          kind === 'slow' ? SLOW_COLOR :
-          FLOOR_COLOR;
-        this.drawDiamond(ctx, { x, y }, offsetX, offsetY, color);
+        const coord = { x, y };
+        const props = this.getTileProperties(coord);
+        let color = OVERLAY_COLORS[props.type] ?? OVERLAY_COLORS.floor;
+
+        // Special handling for doors
+        if (props.type === 'door') {
+          const doorId = props.linkedId ?? 'default';
+          color = this.gameState.openDoors.has(doorId) ? DOOR_OPEN_COLOR : DOOR_CLOSED_COLOR;
+        }
+
+        this.drawDiamond(ctx, coord, offsetX, offsetY, color);
+
+        // Draw direction arrows for conveyors
+        if (props.type === 'conveyor' && props.direction) {
+          this.drawConveyorArrow(ctx, coord, props.direction, offsetX, offsetY);
+        }
+
+        // Draw icons for special tiles
+        if (props.type === 'hazard') {
+          this.drawTileIcon(ctx, coord, 'flame', offsetX, offsetY);
+        } else if (props.type === 'exit') {
+          this.drawTileIcon(ctx, coord, 'star', offsetX, offsetY);
+        } else if (props.type === 'spawn') {
+          this.drawTileIcon(ctx, coord, 'circle', offsetX, offsetY);
+        }
       }
     }
   }
@@ -415,13 +657,15 @@ export class MovementTester {
   }
 
   private renderPath(ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number): void {
-    if (!this.player.path.length) return;
+    const player = this.gameState.player;
+    if (!player.path.length) return;
+
     ctx.strokeStyle = PATH_COLOR;
     ctx.lineWidth = 2;
     ctx.beginPath();
 
-    for (let i = 0; i < this.player.path.length; i++) {
-      const coord = this.player.path[i];
+    for (let i = 0; i < player.path.length; i++) {
+      const coord = player.path[i];
       if (!coord) continue;
       const center = gridToScreen(coord.x, coord.y, offsetX, offsetY);
       if (i === 0) {
@@ -434,11 +678,83 @@ export class MovementTester {
   }
 
   private renderPlayer(ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number): void {
-    const pos = gridToScreen(this.player.position.x, this.player.position.y, offsetX, offsetY);
-    ctx.fillStyle = PLAYER_COLOR;
+    const player = this.gameState.player;
+    const pos = gridToScreen(player.visualPosition.x, player.visualPosition.y, offsetX, offsetY);
+
+    // Determine player color based on state
+    let color = PLAYER_COLOR;
+    if (player.state === 'dead') {
+      color = PLAYER_DEAD_COLOR;
+    } else if (player.state === 'won') {
+      color = PLAYER_WON_COLOR;
+    } else if (this.damageFlashTimer > 0) {
+      // Damage flash - alternate between red and normal
+      const flashPhase = Math.floor(this.damageFlashTimer * 10) % 2;
+      color = flashPhase === 0 ? PLAYER_DEAD_COLOR : PLAYER_COLOR;
+    }
+
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(pos.x, pos.y + ISO_TILE_HEIGHT / 2, ISO_TILE_WIDTH / 4, 0, Math.PI * 2);
     ctx.fill();
+
+    // Draw X for dead player
+    if (player.state === 'dead') {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      const size = ISO_TILE_WIDTH / 6;
+      ctx.beginPath();
+      ctx.moveTo(pos.x - size, pos.y + ISO_TILE_HEIGHT / 2 - size);
+      ctx.lineTo(pos.x + size, pos.y + ISO_TILE_HEIGHT / 2 + size);
+      ctx.moveTo(pos.x + size, pos.y + ISO_TILE_HEIGHT / 2 - size);
+      ctx.lineTo(pos.x - size, pos.y + ISO_TILE_HEIGHT / 2 + size);
+      ctx.stroke();
+    }
+  }
+
+  private renderHPDisplay(): void {
+    const ctx = this.canvas.ctx;
+    const player = this.gameState.player;
+
+    ctx.save();
+    ctx.font = '14px monospace';
+
+    // HP display
+    const hpText = `HP: ${player.hp}/${player.maxHp}`;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(8, 8, 80, 24);
+    ctx.fillStyle = player.hp <= 1 ? '#ff4a4a' : '#4aff9e';
+    ctx.fillText(hpText, 14, 24);
+
+    // Turn counter (if step mode)
+    if (this.gameState.isStepMode) {
+      const turnText = `Turn: ${this.gameState.turnNumber}`;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(8, 36, 80, 24);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(turnText, 14, 52);
+
+      // Waiting indicator
+      if (this.gameState.waitingForStep) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(8, 64, 100, 24);
+        ctx.fillStyle = '#ffc75e';
+        ctx.fillText('Waiting...', 14, 80);
+      }
+    }
+
+    // State display
+    if (player.state === 'dead') {
+      ctx.fillStyle = 'rgba(255, 74, 74, 0.9)';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText('DEAD', this.canvas.viewport.width / 2 - 40, this.canvas.viewport.height / 2);
+    } else if (player.state === 'won') {
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText('WIN!', this.canvas.viewport.width / 2 - 40, this.canvas.viewport.height / 2);
+    }
+
+    ctx.restore();
   }
 
   private drawDiamond(
@@ -459,11 +775,98 @@ export class MovementTester {
     ctx.fill();
   }
 
+  private drawConveyorArrow(
+    ctx: CanvasRenderingContext2D,
+    coord: GridCoord,
+    direction: Direction,
+    offsetX: number,
+    offsetY: number
+  ): void {
+    const center = gridToScreen(coord.x, coord.y, offsetX, offsetY);
+    const cx = center.x;
+    const cy = center.y + ISO_TILE_HEIGHT / 2;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Rotate based on direction
+    const rotations: Record<Direction, number> = {
+      north: -Math.PI / 2,
+      east: 0,
+      south: Math.PI / 2,
+      west: Math.PI,
+    };
+    ctx.rotate(rotations[direction]);
+
+    // Draw arrow
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-4, 0);
+    ctx.lineTo(4, 0);
+    ctx.lineTo(1, -3);
+    ctx.moveTo(4, 0);
+    ctx.lineTo(1, 3);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  private drawTileIcon(
+    ctx: CanvasRenderingContext2D,
+    coord: GridCoord,
+    icon: string,
+    offsetX: number,
+    offsetY: number
+  ): void {
+    const center = gridToScreen(coord.x, coord.y, offsetX, offsetY);
+    const cx = center.x;
+    const cy = center.y + ISO_TILE_HEIGHT / 2;
+
+    ctx.save();
+
+    if (icon === 'flame') {
+      // Simple flame shape
+      ctx.fillStyle = '#ff6600';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 4);
+      ctx.bezierCurveTo(cx - 3, cy - 2, cx - 3, cy + 2, cx, cy + 4);
+      ctx.bezierCurveTo(cx + 3, cy + 2, cx + 3, cy - 2, cx, cy - 4);
+      ctx.fill();
+    } else if (icon === 'star') {
+      // Simple star
+      ctx.fillStyle = '#00ff00';
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+        const r = i % 2 === 0 ? 4 : 2;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    } else if (icon === 'circle') {
+      // Spawn marker
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
   private findFirstWalkable(): GridCoord | null {
     for (let y = 0; y < this.level.gridHeight; y++) {
       for (let x = 0; x < this.level.gridWidth; x++) {
         const coord = { x, y };
-        if (this.getTileKind(coord) !== 'blocker') {
+        const props = this.getTileProperties(coord);
+        const behavior = this.behaviorRegistry.get(props.type);
+        const ctx = this.createBehaviorContext(coord, props);
+        if (behavior.isWalkable(ctx)) {
           return coord;
         }
       }

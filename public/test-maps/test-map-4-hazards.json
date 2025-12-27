@@ -1,0 +1,52 @@
+{
+  "version": 2,
+  "metadata": {
+    "id": "test-map-4-hazards",
+    "name": "Test Map 4: Hazard Gauntlet",
+    "author": "CLOPS Dev",
+    "created": "2024-12-27T00:00:00.000Z",
+    "modified": "2024-12-27T00:00:00.000Z",
+    "version": 1
+  },
+  "grid": {
+    "width": 8,
+    "height": 8,
+    "tileWidth": 32,
+    "tileHeight": 32
+  },
+  "layers": [
+    {
+      "id": "terrain",
+      "name": "Terrain",
+      "zIndex": 0,
+      "visible": true,
+      "tiles": []
+    }
+  ],
+  "gameplayLayer": {
+    "tiles": [
+      { "position": { "x": 0, "y": 3 }, "properties": { "type": "spawn" } },
+      { "position": { "x": 1, "y": 3 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 2, "y": 3 }, "properties": { "type": "floor" } },
+      { "position": { "x": 2, "y": 2 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 2, "y": 4 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 3, "y": 2 }, "properties": { "type": "floor" } },
+      { "position": { "x": 3, "y": 3 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 3, "y": 4 }, "properties": { "type": "floor" } },
+      { "position": { "x": 4, "y": 2 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 4, "y": 3 }, "properties": { "type": "floor" } },
+      { "position": { "x": 4, "y": 4 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 5, "y": 2 }, "properties": { "type": "floor" } },
+      { "position": { "x": 5, "y": 3 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 5, "y": 4 }, "properties": { "type": "floor" } },
+      { "position": { "x": 6, "y": 2 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 6, "y": 3 }, "properties": { "type": "floor" } },
+      { "position": { "x": 6, "y": 4 }, "properties": { "type": "hazard", "damage": 1 } },
+      { "position": { "x": 7, "y": 3 }, "properties": { "type": "exit" } },
+      { "position": { "x": 0, "y": 2 }, "properties": { "type": "blocker" } },
+      { "position": { "x": 0, "y": 4 }, "properties": { "type": "blocker" } },
+      { "position": { "x": 1, "y": 2 }, "properties": { "type": "blocker" } },
+      { "position": { "x": 1, "y": 4 }, "properties": { "type": "blocker" } }
+    ]
+  }
+}

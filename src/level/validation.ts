@@ -3,7 +3,17 @@
  */
 
 import { z } from 'zod';
-import { LevelData, LayerData, TilePlacement, GridCoord, LevelMetadata, GridConfig } from '../core/types';
+import {
+  LevelData,
+  LevelDataV2,
+  LayerData,
+  TilePlacement,
+  GridCoord,
+  LevelMetadata,
+  GridConfig,
+  TileProperties,
+  GameplayTilePlacement,
+} from '../core/types';
 
 // Grid coordinate schema
 const GridCoordSchema = z.object({
@@ -45,27 +55,96 @@ const LevelMetadataSchema = z.object({
   version: z.number().int().min(1),
 });
 
-// Complete level data schema
-const LevelDataSchema = z.object({
+// ============================================================================
+// Gameplay Tile Schemas (v2)
+// ============================================================================
+
+// Gameplay tile type enum
+const GameplayTileTypeSchema = z.enum([
+  'floor',
+  'blocker',
+  'slow',
+  'hole',
+  'conveyor',
+  'hazard',
+  'door',
+  'exit',
+  'spawn',
+]);
+
+// Direction enum for conveyors
+const DirectionSchema = z.enum(['north', 'east', 'south', 'west']);
+
+// Tile properties schema
+const TilePropertiesSchema = z.object({
+  type: GameplayTileTypeSchema,
+  direction: DirectionSchema.optional(),
+  linkedId: z.string().optional(),
+  damage: z.number().int().min(1).optional(),
+});
+
+// Gameplay tile placement schema
+const GameplayTilePlacementSchema = z.object({
+  position: GridCoordSchema,
+  properties: TilePropertiesSchema,
+});
+
+// Gameplay layer schema
+const GameplayLayerSchema = z.object({
+  tiles: z.array(GameplayTilePlacementSchema),
+});
+
+// ============================================================================
+// Level Data Schemas
+// ============================================================================
+
+// V1 level data schema (legacy)
+const LevelDataSchemaV1 = z.object({
   version: z.literal(1),
   metadata: LevelMetadataSchema,
   grid: GridConfigSchema,
   layers: z.array(LayerDataSchema).min(1),
 });
 
+// V2 level data schema (with gameplay layer)
+const LevelDataSchemaV2 = z.object({
+  version: z.literal(2),
+  metadata: LevelMetadataSchema,
+  grid: GridConfigSchema,
+  layers: z.array(LayerDataSchema).min(1),
+  gameplayLayer: GameplayLayerSchema.optional(),
+});
+
+// Combined schema that accepts both v1 and v2
+const LevelDataSchema = z.union([LevelDataSchemaV1, LevelDataSchemaV2]);
+
 /**
- * Validate and parse level data
+ * Validate and parse level data (supports v1 and v2)
  * @throws ZodError if validation fails
  */
-export function validateLevelData(data: unknown): LevelData {
+export function validateLevelData(data: unknown): LevelData | LevelDataV2 {
   return LevelDataSchema.parse(data);
 }
 
 /**
  * Safely validate level data, returning result
  */
-export function safeParseLevelData(data: unknown): z.SafeParseReturnType<unknown, LevelData> {
+export function safeParseLevelData(data: unknown): z.SafeParseReturnType<unknown, LevelData | LevelDataV2> {
   return LevelDataSchema.safeParse(data);
+}
+
+/**
+ * Validate tile properties
+ */
+export function validateTileProperties(data: unknown): TileProperties {
+  return TilePropertiesSchema.parse(data);
+}
+
+/**
+ * Validate gameplay tile placement
+ */
+export function validateGameplayTilePlacement(data: unknown): GameplayTilePlacement {
+  return GameplayTilePlacementSchema.parse(data);
 }
 
 /**
@@ -107,4 +186,12 @@ export const schemas = {
   GridConfig: GridConfigSchema,
   LevelMetadata: LevelMetadataSchema,
   LevelData: LevelDataSchema,
+  LevelDataV1: LevelDataSchemaV1,
+  LevelDataV2: LevelDataSchemaV2,
+  // Gameplay schemas
+  GameplayTileType: GameplayTileTypeSchema,
+  Direction: DirectionSchema,
+  TileProperties: TilePropertiesSchema,
+  GameplayTilePlacement: GameplayTilePlacementSchema,
+  GameplayLayer: GameplayLayerSchema,
 };

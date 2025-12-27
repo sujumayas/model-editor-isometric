@@ -4,11 +4,18 @@
 
 import {
   LevelData,
+  LevelDataV2,
   LevelMetadata,
   GridConfig,
   GridCoord,
   TileData,
   LayerData,
+  TileProperties,
+  GameplayTilePlacement,
+  GameplayLayerData,
+  PositionKey,
+  toPositionKey,
+  fromPositionKey,
 } from '../core/types';
 import { GRID_WIDTH, GRID_HEIGHT, TILE_WIDTH, TILE_HEIGHT, DEFAULT_LAYERS } from '../core/constants';
 import { Layer } from './Layer';
@@ -21,6 +28,7 @@ export class Level {
   readonly gridConfig: GridConfig;
   private layers: Layer[] = [];
   private layerMap = new Map<string, Layer>();
+  private gameplayTiles = new Map<PositionKey, TileProperties>();
 
   constructor(
     metadata: Partial<LevelMetadata> = {},
@@ -180,6 +188,90 @@ export class Level {
     return null;
   }
 
+  // ============================================================================
+  // Gameplay Layer Methods
+  // ============================================================================
+
+  /**
+   * Get gameplay properties for a tile position.
+   * Returns undefined if no gameplay properties set (defaults to floor).
+   */
+  getGameplayTile(coord: GridCoord): TileProperties | undefined {
+    if (!this.isInBounds(coord)) return undefined;
+    return this.gameplayTiles.get(toPositionKey(coord));
+  }
+
+  /**
+   * Set gameplay properties for a tile position.
+   * Pass undefined or 'floor' type to remove custom properties.
+   */
+  setGameplayTile(coord: GridCoord, properties: TileProperties | undefined): boolean {
+    if (!this.isInBounds(coord)) return false;
+
+    const key = toPositionKey(coord);
+    if (!properties || properties.type === 'floor') {
+      this.gameplayTiles.delete(key);
+    } else {
+      this.gameplayTiles.set(key, properties);
+    }
+    return true;
+  }
+
+  /**
+   * Remove gameplay properties for a tile position.
+   */
+  removeGameplayTile(coord: GridCoord): boolean {
+    if (!this.isInBounds(coord)) return false;
+    return this.gameplayTiles.delete(toPositionKey(coord));
+  }
+
+  /**
+   * Clear all gameplay tiles.
+   */
+  clearGameplayTiles(): void {
+    this.gameplayTiles.clear();
+  }
+
+  /**
+   * Get all gameplay tiles as an array for iteration.
+   */
+  getAllGameplayTiles(): Array<{ coord: GridCoord; properties: TileProperties }> {
+    const result: Array<{ coord: GridCoord; properties: TileProperties }> = [];
+    for (const [key, properties] of this.gameplayTiles) {
+      result.push({ coord: fromPositionKey(key), properties });
+    }
+    return result;
+  }
+
+  /**
+   * Find all tiles with a specific gameplay type.
+   */
+  findGameplayTilesByType(type: TileProperties['type']): GridCoord[] {
+    const result: GridCoord[] = [];
+    for (const [key, properties] of this.gameplayTiles) {
+      if (properties.type === type) {
+        result.push(fromPositionKey(key));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Find the first spawn tile. Returns null if none found.
+   */
+  findSpawnTile(): GridCoord | null {
+    const spawns = this.findGameplayTilesByType('spawn');
+    return spawns[0] ?? null;
+  }
+
+  /**
+   * Find the first exit tile. Returns null if none found.
+   */
+  findExitTile(): GridCoord | null {
+    const exits = this.findGameplayTilesByType('exit');
+    return exits[0] ?? null;
+  }
+
   /**
    * Update modified timestamp
    */
@@ -188,26 +280,44 @@ export class Level {
   }
 
   /**
-   * Serialize level to plain object
+   * Serialize level to plain object (v2 format with gameplay layer)
    */
-  toData(): LevelData {
+  toData(): LevelDataV2 {
+    // Build gameplay layer data
+    const gameplayTiles: GameplayTilePlacement[] = [];
+    for (const [key, properties] of this.gameplayTiles) {
+      gameplayTiles.push({
+        position: fromPositionKey(key),
+        properties,
+      });
+    }
+
     return {
-      version: 1,
+      version: 2,
       metadata: { ...this.metadata },
       grid: { ...this.gridConfig },
       layers: this.layers.map((layer) => layer.toData()),
+      gameplayLayer: gameplayTiles.length > 0 ? { tiles: gameplayTiles } : undefined,
     };
   }
 
   /**
-   * Create a level from serialized data
+   * Create a level from serialized data (supports v1 and v2)
    */
-  static fromData(data: LevelData): Level {
+  static fromData(data: LevelData | LevelDataV2): Level {
     const level = new Level(data.metadata, data.grid);
 
     for (const layerData of data.layers) {
       const layer = Layer.fromData(layerData);
       level.addLayer(layer);
+    }
+
+    // Load gameplay layer if present (v2 format)
+    const v2Data = data as LevelDataV2;
+    if (v2Data.gameplayLayer?.tiles) {
+      for (const placement of v2Data.gameplayLayer.tiles) {
+        level.setGameplayTile(placement.position, placement.properties);
+      }
     }
 
     return level;

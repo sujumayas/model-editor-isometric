@@ -1,0 +1,52 @@
+{
+  "version": 2,
+  "metadata": {
+    "id": "test-map-3-conveyors",
+    "name": "Test Map 3: Conveyor Puzzle",
+    "author": "CLOPS Dev",
+    "created": "2024-12-27T00:00:00.000Z",
+    "modified": "2024-12-27T00:00:00.000Z",
+    "version": 1
+  },
+  "grid": {
+    "width": 8,
+    "height": 8,
+    "tileWidth": 32,
+    "tileHeight": 32
+  },
+  "layers": [
+    {
+      "id": "terrain",
+      "name": "Terrain",
+      "zIndex": 0,
+      "visible": true,
+      "tiles": []
+    }
+  ],
+  "gameplayLayer": {
+    "tiles": [
+      { "position": { "x": 0, "y": 0 }, "properties": { "type": "spawn" } },
+      { "position": { "x": 1, "y": 0 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 2, "y": 0 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 3, "y": 0 }, "properties": { "type": "conveyor", "direction": "south" } },
+      { "position": { "x": 3, "y": 1 }, "properties": { "type": "conveyor", "direction": "south" } },
+      { "position": { "x": 3, "y": 2 }, "properties": { "type": "conveyor", "direction": "south" } },
+      { "position": { "x": 3, "y": 3 }, "properties": { "type": "conveyor", "direction": "west" } },
+      { "position": { "x": 2, "y": 3 }, "properties": { "type": "conveyor", "direction": "west" } },
+      { "position": { "x": 1, "y": 3 }, "properties": { "type": "conveyor", "direction": "south" } },
+      { "position": { "x": 1, "y": 4 }, "properties": { "type": "conveyor", "direction": "south" } },
+      { "position": { "x": 1, "y": 5 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 2, "y": 5 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 3, "y": 5 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 4, "y": 5 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 5, "y": 5 }, "properties": { "type": "conveyor", "direction": "south" } },
+      { "position": { "x": 5, "y": 6 }, "properties": { "type": "conveyor", "direction": "south" } },
+      { "position": { "x": 5, "y": 7 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 6, "y": 7 }, "properties": { "type": "conveyor", "direction": "east" } },
+      { "position": { "x": 7, "y": 7 }, "properties": { "type": "exit" } },
+      { "position": { "x": 4, "y": 0 }, "properties": { "type": "blocker" } },
+      { "position": { "x": 0, "y": 3 }, "properties": { "type": "blocker" } },
+      { "position": { "x": 0, "y": 5 }, "properties": { "type": "blocker" } }
+    ]
+  }
+}

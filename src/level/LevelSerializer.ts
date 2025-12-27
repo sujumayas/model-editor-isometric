@@ -2,9 +2,25 @@
  * Level serialization and deserialization
  */
 
-import { LevelData } from '../core/types';
+import { LevelData, LevelDataV2 } from '../core/types';
 import { Level } from './Level';
 import { validateLevelData } from './validation';
+
+/**
+ * Migrate v1 level data to v2 format
+ */
+export function migrateLevelData(data: LevelData | LevelDataV2): LevelDataV2 {
+  if (data.version === 2) {
+    return data as LevelDataV2;
+  }
+
+  // V1 -> V2: Add empty gameplay layer
+  return {
+    ...data,
+    version: 2,
+    gameplayLayer: undefined, // All tiles default to 'floor'
+  };
+}
 
 export interface SerializeOptions {
   /** Pretty print JSON */

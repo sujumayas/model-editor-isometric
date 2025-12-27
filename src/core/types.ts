@@ -33,6 +33,52 @@ export interface GridBounds {
 /** Tile ID (index into the tileset, 0-114) */
 export type TileId = number;
 
+// ============================================================================
+// Gameplay Tile Types
+// ============================================================================
+
+/** Gameplay tile type - defines behavior for movement and effects */
+export type GameplayTileType =
+  | 'floor'     // Default walkable
+  | 'blocker'   // Impassable wall
+  | 'slow'      // Movement cost 2.5x
+  | 'hole'      // Instant death on entry
+  | 'conveyor'  // Forced movement after entry
+  | 'hazard'    // Deals damage on entry
+  | 'door'      // Blocks until toggled
+  | 'exit'      // Win condition trigger
+  | 'spawn';    // Player spawn point
+
+/** Cardinal direction for conveyors */
+export type Direction = 'north' | 'east' | 'south' | 'west';
+
+/** Direction vectors for movement */
+export const DIRECTION_VECTORS: Record<Direction, GridCoord> = {
+  north: { x: 0, y: -1 },
+  east: { x: 1, y: 0 },
+  south: { x: 0, y: 1 },
+  west: { x: -1, y: 0 },
+};
+
+/** Gameplay properties for a tile */
+export interface TileProperties {
+  readonly type: GameplayTileType;
+  readonly direction?: Direction;   // For conveyor
+  readonly linkedId?: string;       // For door (links to trigger)
+  readonly damage?: number;         // For hazard (default 1)
+}
+
+/** A gameplay tile placed at a specific position */
+export interface GameplayTilePlacement {
+  readonly position: GridCoord;
+  readonly properties: TileProperties;
+}
+
+/** Gameplay layer data (for serialization) */
+export interface GameplayLayerData {
+  readonly tiles: GameplayTilePlacement[];
+}
+
 /** Data for a placed tile */
 export interface TileData {
   readonly tileId: TileId;
@@ -105,12 +151,17 @@ export interface LevelMetadata {
   readonly version: number;
 }
 
-/** Complete level data (serialized format) */
+/** Complete level data (serialized format) - v1 */
 export interface LevelData {
   readonly version: number;
   readonly metadata: LevelMetadata;
   readonly grid: GridConfig;
   readonly layers: LayerData[];
+}
+
+/** Level data v2 with gameplay layer */
+export interface LevelDataV2 extends LevelData {
+  readonly gameplayLayer?: GameplayLayerData;
 }
 
 // ============================================================================
