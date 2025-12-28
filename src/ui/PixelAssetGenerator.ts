@@ -15,6 +15,7 @@ interface PixelGeneratorState {
   palette: string;
   guidance: string;
   model: string;
+  debug: boolean;
 }
 
 export class PixelAssetGenerator {
@@ -27,10 +28,12 @@ export class PixelAssetGenerator {
   private paletteInput: HTMLInputElement;
   private guidanceInput: HTMLTextAreaElement;
   private modelInput: HTMLInputElement;
+  private debugInput: HTMLInputElement;
   private statusEl: HTMLElement;
   private previewEl: HTMLPreElement;
   private resultImage: HTMLImageElement;
   private resultMeta: HTMLElement;
+  private debugEl: HTMLPreElement;
   private downloadLink: HTMLAnchorElement;
   private generateBtn: HTMLButtonElement;
 
@@ -40,7 +43,8 @@ export class PixelAssetGenerator {
     tileRows: 3,
     palette: 'emerald, moss green, slate gray, misty blue',
     guidance: 'soft rim light from the top-left, keep silhouettes readable',
-    model: 'imagen-3.0-generate-001',
+    model: '',
+    debug: false,
   };
 
   constructor(controlsId: string, outputId: string) {
@@ -59,10 +63,12 @@ export class PixelAssetGenerator {
     this.paletteInput = document.createElement('input');
     this.guidanceInput = document.createElement('textarea');
     this.modelInput = document.createElement('input');
+    this.debugInput = document.createElement('input');
     this.statusEl = document.createElement('div');
     this.previewEl = document.createElement('pre');
     this.resultImage = document.createElement('img');
     this.resultMeta = document.createElement('div');
+    this.debugEl = document.createElement('pre');
     this.downloadLink = document.createElement('a');
     this.generateBtn = document.createElement('button');
 
@@ -80,6 +86,7 @@ export class PixelAssetGenerator {
     this.controls.appendChild(this.renderPaletteGroup());
     this.controls.appendChild(this.renderGuidanceGroup());
     this.controls.appendChild(this.renderModelGroup());
+    this.controls.appendChild(this.renderDebugGroup());
     this.controls.appendChild(this.renderActions());
     this.controls.appendChild(this.renderPromptPreview());
   }
@@ -249,17 +256,48 @@ export class PixelAssetGenerator {
     this.modelInput.type = 'text';
     this.modelInput.value = this.state.model;
     this.modelInput.className = 'input';
-    this.modelInput.placeholder = 'imagen-3.0-generate-001';
+    this.modelInput.placeholder = 'gemini-2.0-flash-exp-image-generation';
     this.modelInput.addEventListener('input', () => {
       this.state.model = this.modelInput.value;
     });
 
     const meta = document.createElement('div');
     meta.className = 'control-meta';
-    meta.textContent = 'Defaults to the Gemini 3.0 model configured in the Netlify function.';
+    meta.textContent = 'Leave empty to use the default Gemini image generation model.';
 
     group.appendChild(label);
     group.appendChild(this.modelInput);
+    group.appendChild(meta);
+    return group;
+  }
+
+  private renderDebugGroup(): HTMLElement {
+    const group = document.createElement('div');
+    group.className = 'control-group';
+
+    const label = document.createElement('div');
+    label.className = 'control-label';
+    label.textContent = 'Debug';
+
+    this.debugInput.type = 'checkbox';
+    this.debugInput.checked = this.state.debug;
+    this.debugInput.addEventListener('change', () => {
+      this.state.debug = this.debugInput.checked;
+    });
+
+    const toggle = document.createElement('label');
+    toggle.className = 'control-row control-toggle';
+    toggle.appendChild(this.debugInput);
+    toggle.appendChild(
+      document.createTextNode('Include verbose debug details in responses.')
+    );
+
+    const meta = document.createElement('div');
+    meta.className = 'control-meta';
+    meta.textContent = 'Best used with Netlify dev and DEBUG_GEMINI=1 locally.';
+
+    group.appendChild(label);
+    group.appendChild(toggle);
     group.appendChild(meta);
     return group;
   }
@@ -352,11 +390,16 @@ export class PixelAssetGenerator {
     this.resultMeta.className = 'pixel-meta';
     this.resultMeta.textContent = 'Run the generator to see sheet metadata and download links.';
 
+    this.debugEl.className = 'prompt-preview pixel-debug';
+    this.debugEl.textContent = '';
+    this.debugEl.style.display = 'none';
+
     this.downloadLink.className = 'tool-btn small';
     this.downloadLink.textContent = 'Download PNG';
     this.downloadLink.style.display = 'none';
 
     resultBody.appendChild(this.resultMeta);
+    resultBody.appendChild(this.debugEl);
     resultBody.appendChild(this.downloadLink);
 
     resultCard.appendChild(previewFrame);
@@ -377,6 +420,7 @@ export class PixelAssetGenerator {
       return;
     }
 
+    this.setDebug();
     this.toggleLoading(true);
     this.setStatus('Calling Netlify pixel asset generator...');
 
@@ -388,12 +432,18 @@ export class PixelAssetGenerator {
         palette,
         guidance: this.state.guidance || undefined,
         model: this.state.model || undefined,
+        debug: this.state.debug,
       });
       this.renderResult(response);
+      this.setDebug(response.debug);
       this.setStatus(response.notes ?? 'Generation complete.');
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown generation error';
+      const details = this.getErrorDetails(error);
+      if (details !== undefined) {
+        this.setDebug(details);
+      }
       this.setStatus(`Generation failed: ${message}`, true);
     } finally {
       this.toggleLoading(false);
@@ -452,6 +502,27 @@ export class PixelAssetGenerator {
     const parsed = Number.parseInt(value, 10);
     if (Number.isNaN(parsed)) return min;
     return Math.max(min, Math.min(64, parsed));
+  }
+
+  private getErrorDetails(error: unknown): unknown | undefined {
+    if (!error || typeof error !== 'object') return undefined;
+    return 'details' in error ? (error as { details?: unknown }).details : undefined;
+  }
+
+  private setDebug(details?: unknown): void {
+    if (details === undefined || details === null) {
+      this.debugEl.textContent = '';
+      this.debugEl.style.display = 'none';
+      return;
+    }
+
+    this.debugEl.textContent =
+      `Debug payload:\n${
+        typeof details === 'string'
+          ? details
+          : JSON.stringify(details, null, 2)
+      }`;
+    this.debugEl.style.display = 'block';
   }
 
   private setStatus(message: string, isError = false): void {

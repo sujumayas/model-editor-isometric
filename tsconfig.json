@@ -24,6 +24,6 @@
       "@input/*": ["src/input/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "netlify/**/*"],
   "exclude": ["node_modules", "dist"]
 }
