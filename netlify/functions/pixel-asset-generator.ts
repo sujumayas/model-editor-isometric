@@ -55,6 +55,7 @@ export const handler = async (
   const { prompt, tileColumns, tileRows, palette, guidance } = parsed.data;
   const tileSize = parsed.data.tileSize ?? PIXEL_ASSET_REQUIREMENTS.tileSize;
   const model = parsed.data.model ?? DEFAULT_IMAGE_MODEL;
+  const isImagenModel = model.startsWith('imagen-');
   const effectiveRequirements: PixelAssetRequirements = {
     ...PIXEL_ASSET_REQUIREMENTS,
     tileSize,
@@ -63,7 +64,15 @@ export const handler = async (
   if (model.startsWith('gemini-3.')) {
     return respond(400, {
       error:
-        'The selected Gemini 3.0 model only supports text responses. Use an image-capable model such as imagen-3.0-generate-001 (default) or gemini-1.5-flash-latest.',
+        'The selected Gemini 3.0 model only supports text responses. Use an image-capable model such as imagen-3.0-generate-001 (default).',
+      details: { model },
+    });
+  }
+
+  if (!isImagenModel) {
+    return respond(400, {
+      error:
+        'The requested model does not support direct image generation. Use an Imagen 3.x model such as imagen-3.0-generate-001.',
       details: { model },
     });
   }
@@ -141,7 +150,7 @@ async function generateImageWithGemini({
   prompt: string;
 }): Promise<{ imageBase64?: string; raw: unknown; ok: boolean; status: number }> {
   const url = new URL(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateImage`
   );
   url.searchParams.set('key', apiKey);
 
@@ -149,8 +158,9 @@ async function generateImageWithGemini({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'image/png' },
+      prompt: { text: prompt },
+      // Preserve defaults for output MIME type and count; enforce PNGs via requirements.
+      // See https://ai.google.dev/gemini-api/docs/model-garden/imagegen
     }),
   });
 
@@ -165,16 +175,22 @@ async function generateImageWithGemini({
     return { raw: parsed, ok: false, status: response.status };
   }
 
-  const imagePart =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (parsed as any)?.candidates?.[0]?.content?.parts?.find(
-      (part: unknown) =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (part as any).inlineData?.data || (part as any).inline_data?.data
-    );
+  // The generateImage endpoint returns an `images` array with `data` or `inlineData`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const imagePart = (parsed as any)?.images?.find(
+    (image: unknown) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (image as any)?.data ||
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (image as any)?.inlineData?.data ||
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (image as any)?.inline_data?.data
+  );
 
   const imageBase64 =
-    imagePart?.inlineData?.data ?? imagePart?.inline_data?.data;
+    imagePart?.data ??
+    imagePart?.inlineData?.data ??
+    imagePart?.inline_data?.data;
 
   return {
     imageBase64: typeof imageBase64 === 'string' ? imageBase64 : undefined,
