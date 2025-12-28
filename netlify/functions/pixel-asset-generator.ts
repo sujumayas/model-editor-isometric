@@ -18,6 +18,8 @@ interface HandlerResponse {
   body: string;
 }
 
+const DEFAULT_IMAGE_MODEL = 'imagen-3.0-generate-001';
+
 const requestSchema = z.object({
   prompt: z.string().min(3),
   tileColumns: z.number().int().positive().max(64).default(1),
@@ -25,7 +27,7 @@ const requestSchema = z.object({
   tileSize: z.number().int().positive().max(256).optional(),
   palette: z.array(z.string().min(1)).max(16).optional(),
   guidance: z.string().optional(),
-  model: z.string().default('gemini-3.0-pro-exp-01'),
+  model: z.string().default(DEFAULT_IMAGE_MODEL),
 });
 
 export const handler = async (
@@ -52,11 +54,19 @@ export const handler = async (
 
   const { prompt, tileColumns, tileRows, palette, guidance } = parsed.data;
   const tileSize = parsed.data.tileSize ?? PIXEL_ASSET_REQUIREMENTS.tileSize;
-  const model = parsed.data.model ?? 'gemini-3.0-pro-exp-01';
+  const model = parsed.data.model ?? DEFAULT_IMAGE_MODEL;
   const effectiveRequirements: PixelAssetRequirements = {
     ...PIXEL_ASSET_REQUIREMENTS,
     tileSize,
   };
+
+  if (model.startsWith('gemini-3.')) {
+    return respond(400, {
+      error:
+        'The selected Gemini 3.0 model only supports text responses. Use an image-capable model such as imagen-3.0-generate-001 (default) or gemini-1.5-flash-latest.',
+      details: { model },
+    });
+  }
 
   const composedPrompt = buildPixelAssetPrompt(
     {
@@ -81,6 +91,17 @@ export const handler = async (
     model,
     prompt: composedPrompt,
   });
+
+  if (!geminiResult.ok) {
+    const status =
+      geminiResult.status >= 400 && geminiResult.status < 600
+        ? geminiResult.status
+        : 502;
+    return respond(status, {
+      error: 'Gemini request failed',
+      details: geminiResult.raw,
+    });
+  }
 
   if (!geminiResult.imageBase64) {
     return respond(502, {
@@ -118,7 +139,7 @@ async function generateImageWithGemini({
   apiKey: string;
   model: string;
   prompt: string;
-}): Promise<{ imageBase64?: string; raw: unknown }> {
+}): Promise<{ imageBase64?: string; raw: unknown; ok: boolean; status: number }> {
   const url = new URL(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
   );
@@ -141,7 +162,7 @@ async function generateImageWithGemini({
   }
 
   if (!response.ok) {
-    return { raw: parsed };
+    return { raw: parsed, ok: false, status: response.status };
   }
 
   const imagePart =
@@ -158,6 +179,8 @@ async function generateImageWithGemini({
   return {
     imageBase64: typeof imageBase64 === 'string' ? imageBase64 : undefined,
     raw: parsed,
+    ok: true,
+    status: response.status,
   };
 }
 

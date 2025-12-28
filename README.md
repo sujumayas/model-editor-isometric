@@ -28,7 +28,7 @@ To create a production build, run `npm run build`, then preview it with `npm run
 ## Pixel asset generator (Gemini 3.0)
 - A Netlify Function at `/.netlify/functions/pixel-asset-generator` prompts Gemini 3.0 to render upload-ready sprite sheets.
 - Assets are authored as transparent PNGs with 32x32px tiles, no gutters or drop-shadows, and gentle top-left lighting so they align with the editor’s 2:1 iso shading.
-- Configure a `.env` or Netlify environment variable `GEMINI_API_KEY` with your Gemini key. The default model is `gemini-3.0-pro-exp-01`; override via the `model` payload field if needed.
+- Configure a `.env` or Netlify environment variable `GEMINI_API_KEY` with your Gemini key. The default model is the image-capable `imagen-3.0-generate-001`; override via the `model` payload field if needed (e.g., `gemini-1.5-flash-latest`).
 - Run locally with Netlify CLI (`netlify dev`) and call from the front-end through `generatePixelAsset` in `src/assets/pixel/PixelAssetGeneratorClient.ts`.
 
 ## Usage

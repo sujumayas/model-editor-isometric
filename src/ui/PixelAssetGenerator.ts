@@ -40,7 +40,7 @@ export class PixelAssetGenerator {
     tileRows: 3,
     palette: 'emerald, moss green, slate gray, misty blue',
     guidance: 'soft rim light from the top-left, keep silhouettes readable',
-    model: 'gemini-3.0-pro-exp-01',
+    model: 'imagen-3.0-generate-001',
   };
 
   constructor(controlsId: string, outputId: string) {
@@ -249,7 +249,7 @@ export class PixelAssetGenerator {
     this.modelInput.type = 'text';
     this.modelInput.value = this.state.model;
     this.modelInput.className = 'input';
-    this.modelInput.placeholder = 'gemini-3.0-pro-exp-01';
+    this.modelInput.placeholder = 'imagen-3.0-generate-001';
     this.modelInput.addEventListener('input', () => {
       this.state.model = this.modelInput.value;
     });
