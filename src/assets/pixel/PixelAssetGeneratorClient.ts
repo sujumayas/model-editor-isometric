@@ -13,6 +13,7 @@ export interface PixelAssetRequest {
   guidance?: string;
   model?: string;
   endpoint?: string;
+  debug?: boolean;
 }
 
 export interface PixelAssetResponse {
@@ -24,6 +25,11 @@ export interface PixelAssetResponse {
   model: string;
   requirements: PixelAssetRequirements;
   notes?: string;
+  debug?: Record<string, unknown>;
+}
+
+export interface PixelAssetError extends Error {
+  details?: unknown;
 }
 
 export async function generatePixelAsset(
@@ -43,6 +49,7 @@ export async function generatePixelAsset(
     palette: request.palette,
     guidance: request.guidance,
     model: request.model,
+    debug: request.debug,
   };
 
   const response = await fetchImpl(endpoint, {
@@ -53,9 +60,17 @@ export async function generatePixelAsset(
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(
-      `Pixel asset generation failed (${response.status}): ${message}`
-    );
+    let details: unknown = message;
+    try {
+      details = JSON.parse(message);
+    } catch (error) {
+      details = message;
+    }
+    const error = new Error(
+      `Pixel asset generation failed (${response.status}).`
+    ) as PixelAssetError;
+    error.details = details;
+    throw error;
   }
 
   const data = (await response.json()) as PixelAssetResponse;

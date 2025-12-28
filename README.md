@@ -29,7 +29,10 @@ To create a production build, run `npm run build`, then preview it with `npm run
 - A Netlify Function at `/.netlify/functions/pixel-asset-generator` calls the Imagen 3.0 `generateImage` endpoint to render upload-ready sprite sheets.
 - Assets are authored as transparent PNGs with 32x32px tiles, no gutters or drop-shadows, and gentle top-left lighting so they align with the editor’s 2:1 iso shading.
 - Configure a `.env` or Netlify environment variable `GEMINI_API_KEY` with your Gemini key. The default model is the image-capable `imagen-3.0-generate-001`; override via the `model` payload field if Google adds newer Imagen variants.
-- Run locally with Netlify CLI (`netlify dev`) and call from the front-end through `generatePixelAsset` in `src/assets/pixel/PixelAssetGeneratorClient.ts`.
+- Run locally with Netlify CLI (`netlify dev`) and call from the front-end through `generatePixelAsset` in `src/assets/pixel/PixelAssetGeneratorClient.ts` (defaults to `http://localhost:8888`).
+- For verbose diagnostics, set `DEBUG_GEMINI=1` or `PIXEL_ASSET_DEBUG=1` before running `netlify dev` to include request/response summaries in the function logs and responses.
+- To call the function directly from the terminal, run `node scripts/debug-pixel-asset.mjs --prompt "..." --debug` (see the script help for options).
+- The Pixel Asset Generator panel includes a Debug toggle that prints the debug payload in the output panel.
 
 ## Usage
 - **Select tiles:** Click a sprite in the palette to set the active tile. Layers can be toggled or selected from the layer panel.
