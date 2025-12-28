@@ -1023,6 +1023,7 @@ export class MovementTester {
       this.player.state === 'scared' ? PLAYER_SCARED_COLOR :
       PLAYER_COLOR;
     const frame = this.activeAnimator?.getCurrentFrame();
+    let hpCenterY = pos.y - 8;
     if (frame && this.characterReady) {
       const anchor = this.activeAnimator.anchor;
       const size = this.activeAnimator.size;
@@ -1033,6 +1034,7 @@ export class MovementTester {
         ctx.fillStyle = 'rgba(255,132,132,0.35)';
         ctx.fillRect(drawX, drawY, size.width, size.height);
       }
+      hpCenterY = drawY - 8;
     } else {
       ctx.fillStyle = isHurtFlash ? PLAYER_HURT_COLOR : baseColor;
       ctx.beginPath();
@@ -1040,7 +1042,7 @@ export class MovementTester {
       ctx.fill();
     }
 
-    this.renderHpIndicator(ctx, pos.x, pos.y);
+    this.renderHpIndicator(ctx, pos.x, hpCenterY);
   }
 
   private renderHpIndicator(ctx: CanvasRenderingContext2D, centerX: number, centerY: number): void {
