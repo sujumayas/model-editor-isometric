@@ -164,11 +164,13 @@ async function generateImageWithGemini({
     }),
   });
 
+  // Read the body once to avoid double-consumption errors when parsing failures occur.
+  const bodyText = await response.text();
   let parsed: unknown;
   try {
-    parsed = await response.json();
+    parsed = JSON.parse(bodyText);
   } catch (error) {
-    parsed = await response.text();
+    parsed = bodyText;
   }
 
   if (!response.ok) {
